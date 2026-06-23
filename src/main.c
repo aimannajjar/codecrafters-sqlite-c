@@ -27,7 +27,7 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Logs from your program will appear here!\n");
 
         // TODO: Uncomment the code below to pass the first stage
-        // printf("database page size: %u\n", page_size);
+        printf("database page size: %u\n", page_size);
 
         fclose(database_file);
     } else {
