@@ -4,7 +4,7 @@
 
 int main(int argc, char *argv[]) {
     if (argc != 3) {
-        fprintf(stderr, "Usage: ./your_program.sh <database path> <command>\n");
+        fprintf(stderr, "Usage: %s <database path> <command>\n", argv[0]);
         return 1;
     }
 
@@ -20,8 +20,11 @@ int main(int argc, char *argv[]) {
 
         fseek(database_file, 16, SEEK_SET);  // Skip the first 16 bytes of the header
         unsigned char buffer[2];
-        fread(buffer, 1, 2, database_file);
-        unsigned short page_size = (buffer[1] | (buffer[0] << 8));
+        if (!fread(buffer, 1, 2, database_file)) {
+            perror("fread");
+            return 1;
+        }
+        unsigned short page_size =  (buffer[0] << 8) | buffer[1];
 
         // You can use print statements as follows for debugging, they'll be visible when running tests.
         fprintf(stderr, "Logs from your program will appear here!\n");
