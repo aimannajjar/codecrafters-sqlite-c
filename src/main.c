@@ -1,4 +1,5 @@
 #include "database.h"
+#include "page.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,8 +27,16 @@ int main(int argc, char *argv[]) {
         goto close;
     }
 
+    struct btree_header header;
+    if (btree_header_read(&header, database_file) != 0) {
+        puts("failed to parse page header");
+        retval = EXIT_FAILURE;
+        goto close;
+    }
+
     if (strcmp(command, ".dbinfo") == 0) {
         printf("database page size: %u\n", (unsigned)db.page_size);
+        printf("number of tables: %u\n", (unsigned)header.cells_count);
     }
 
 close:
