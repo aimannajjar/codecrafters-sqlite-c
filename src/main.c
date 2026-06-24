@@ -1,6 +1,7 @@
-#include <string.h>
+#include "database.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 int main(int argc, char *argv[]) {
     if (argc != 3) {
@@ -8,35 +9,29 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+    int retval = EXIT_SUCCESS;
     const char *database_file_path = argv[1];
     const char *command = argv[2];
 
-    if (strcmp(command, ".dbinfo") == 0) {
-        FILE *database_file = fopen(database_file_path, "rb");
-        if (!database_file) {
-            fprintf(stderr, "Failed to open the database file\n");
-            return 1;
-        }
-
-        fseek(database_file, 16, SEEK_SET);  // Skip the first 16 bytes of the header
-        unsigned char buffer[2];
-        if (!fread(buffer, 1, 2, database_file)) {
-            perror("fread");
-            return 1;
-        }
-        unsigned short page_size =  (buffer[0] << 8) | buffer[1];
-
-        // You can use print statements as follows for debugging, they'll be visible when running tests.
-        fprintf(stderr, "Logs from your program will appear here!\n");
-
-        // TODO: Uncomment the code below to pass the first stage
-        printf("database page size: %u\n", page_size);
-
-        fclose(database_file);
-    } else {
-        fprintf(stderr, "Unknown command %s\n", command);
+    FILE *database_file = fopen(database_file_path, "rb");
+    if (!database_file) {
+        perror(argv[1]);
         return 1;
     }
 
-    return 0;
+    struct db db;
+    if (db_header_read(&db, database_file) != 0) {
+        puts("failed to parse header");
+        retval = EXIT_FAILURE;
+        goto close;
+    }
+
+    if (strcmp(command, ".dbinfo") == 0) {
+        printf("database page size: %u\n", (unsigned)db.page_size);
+    }
+
+close:
+    fclose(database_file);
+
+    return retval;
 }
