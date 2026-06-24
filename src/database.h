@@ -19,4 +19,7 @@ struct db {
 
 int db_header_read(struct db *buf, FILE *stream);
 
+extern uint16_t db_page_size;
+extern enum CHARSET_ENC db_text_encoding;
+
 #endif

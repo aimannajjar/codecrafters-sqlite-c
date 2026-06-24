@@ -38,6 +38,15 @@ int main(int argc, char *argv[]) {
         printf("database page size: %u\n", (unsigned)db.page_size);
         printf("number of tables: %u\n", (unsigned)header.cells_count);
     }
+    else if (strcmp(command, ".tables") == 0) {
+        struct btree_tleaf_cell cell;
+        if (btree_tleaf_cell_read(&cell, &header, 0, database_file) != 0) {
+            puts("failed to parse schema page");
+        }
+    }
+
+free_header:
+    btree_header_free(&header);
 
 close:
     fclose(database_file);
