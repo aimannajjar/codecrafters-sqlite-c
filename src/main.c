@@ -10,7 +10,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    int retval = EXIT_SUCCESS;
+    int result = EXIT_SUCCESS;
     const char *database_file_path = argv[1];
     const char *command = argv[2];
 
@@ -23,14 +23,14 @@ int main(int argc, char *argv[]) {
     struct db db;
     if (db_header_read(&db, database_file) != 0) {
         puts("failed to parse header");
-        retval = EXIT_FAILURE;
+        result = EXIT_FAILURE;
         goto close;
     }
 
     struct btree_header header;
     if (btree_header_read(&header, database_file) != 0) {
         puts("failed to parse page header");
-        retval = EXIT_FAILURE;
+        result = EXIT_FAILURE;
         goto close;
     }
 
@@ -51,5 +51,5 @@ free_header:
 close:
     fclose(database_file);
 
-    return retval;
+    return result;
 }
