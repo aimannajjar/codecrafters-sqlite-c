@@ -6,8 +6,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-int btree_header_read(struct btree_header *header, FILE *stream) {
+int btree_header_read(struct btree_header *header, int first, FILE *stream) {
     header->page_start = ftell(stream);
+    if (first)
+        header->page_start -= 100;
+
     if (fread(&header->page_type, 1, 1, stream) != 1) {
         return -1;
     }
@@ -20,13 +23,24 @@ int btree_header_read(struct btree_header *header, FILE *stream) {
         return -1;
     }
 
-    if (!fread_be16(&header->cell_content_start, stream)) {
+    uint16_t cells_start;
+    if (fread_be16(&cells_start, stream) != 0) {
+        if (cells_start == 0) {
+            header->cell_content_start = 65536;
+        } else {
+            header->cell_content_start = cells_start;
+        }
+    } else {
         return -1;
     }
 
+    if (fread(&header->free_bytes_fragments, 1, 1, stream) != 1) {
+        return -1;
+    }
     // |   |   |   |   |
     header->right_ptr = 0;
     if (header->page_type == TABLE_INTERIOR_PAGE) {
+        // only interior pages have right_ptr
         if (!fread_be32(&header->right_ptr, stream)) {
             return -1;
         }
@@ -51,7 +65,7 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
                           struct btree_header *header, int index,
                           FILE *stream) {
     int cell_offset = header->cell_offsets[index];
-    fseek(stream, header->page_start + header->cell_content_start, SEEK_SET);
+    fseek(stream, header->page_start + cell_offset, SEEK_SET);
 
     if (fread_varint(&cell->payload_size, stream) <= 0) {
         return -1;
@@ -61,45 +75,111 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
         return -1;
     }
 
-    struct record record;
-    record.header_size = ftell(stream);
+    struct record *record = malloc(sizeof *record);
+    record->record_start = ftell(stream);
     int c;
-    if ((c = fread_varint(&record.header_size, stream)) <= 0)
+    if ((c = fread_varint(&record->header_size, stream)) <= 0)
         return -1;
-    printf("first record's size is %ld\n", record.header_size);
-    int remaining = record.header_size - c;
-    uint64_t columns[100];
+
+    int remaining = record->header_size - c;
+    uint64_t column_types[100];
     int i = 0;
     while (remaining) {
         int64_t serial = 0;
         if ((c = fread_varint(&serial, stream)) <= 0)
             return -1;
-        columns[i++] = serial;
-        printf("columns[%d] = %ld\n", i - 1, serial);
+        column_types[i++] = serial;
         remaining -= c;
     }
-    int record_count = i;
 
-    for (i = 0; i < record_count; i++) {
-        if (columns[i] >= 12 && !(columns[i] & 0x1)) {
-            uint32_t size = columns[i] / 2;
-        } else if (columns[i] >= 13 && (columns[i] & 0x1)) {
-            // strings
-            uint32_t size = (columns[i] - 13) / 2;
+    record->fields_count = i;
+
+    if (record->fields_count == 0)
+        goto overflow;
+
+    struct field *fields = malloc(sizeof(struct field) * record->fields_count);
+
+    for (i = 0; i < record->fields_count; i++) {
+        if (column_types[i] >= 12 && !(column_types[i] & 0x1)) {
+            // blobs
+            uint32_t size = column_types[i] / 2;
+            char *t = malloc(size);
+            if (fread(t, 1, size, stream) < size) {
+                perror("fread");
+                return -1;
+            }
+            fields[i].type = FIELD_TYPE_BLOB;
+            fields[i].data = t;
+            fields[i].size = size;
+        } else if (column_types[i] >= 13 && (column_types[i] & 0x1)) {
+            // text
+            uint32_t size = (column_types[i] - 13) / 2;
             char *t = malloc(size + 1);
             if (fread(t, 1, size, stream) < size) {
                 perror("fread");
                 return -1;
             }
-            t[size - 1] = '\0';
-            printf("READ TEXT: %s\n", t);
+            t[size] = '\0';
+            fields[i].type = FIELD_TYPE_TEXT;
+            fields[i].data = t;
+            fields[i].size = size + 1; // add 1 for \0
+        } else {
+            // numerical types
+            // test, probably buggy to types quirks
+            struct field f = {
+                .type = FIELD_TYPE_NUMBER,
+            };
+
+            switch (column_types[i]) {
+            case 1:
+                f.number = fgetc(stream);
+                break;
+            case 2:
+                fread_be16((uint16_t *)&f.number, stream);
+                break;
+            case 3:
+                fseek(stream, 3, SEEK_CUR); // todo read be24
+                break;
+            case 4:
+                fread_be32((uint32_t *)&f.number, stream);
+                break;
+            case 5:
+                fseek(stream, 6, SEEK_CUR); // todo read be48
+                break;
+            case 6:
+                fseek(stream, 8, SEEK_CUR); // todo read be64
+                break;
+            default:
+                puts("invalid serial type encountered");
+                break;
+            }
+
+            fields[i] = f;
         }
     }
+    record->fields = fields;
+
+overflow:
+    if (fread_be32(&cell->overflow_page_number, stream) <= 0) {
+        return -1;
+    }
+
+    cell->record = record;
 
     return 0;
 }
 
 int btree_header_free(struct btree_header *header) {
     free(header->cell_offsets);
+    return 0;
+}
+
+int btree_tleaf_cell_free(struct btree_tleaf_cell *cell) {
+    for (int i = 0; i < cell->record->fields_count; i++) {
+        if (cell->record->fields[i].type != FIELD_TYPE_NUMBER)
+            free(cell->record->fields[i].data);
+    }
+    free(cell->record->fields);
+    free(cell->record);
     return 0;
 }

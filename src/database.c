@@ -25,6 +25,7 @@ int db_header_read(struct db *db, FILE *stream) {
     }
     db_page_size = db->page_size; // global since it's needed in many places
 
+    // parse encoding at byte 56 then go back 
     int r = ftell(stream);
     fseek(stream, 56, SEEK_SET);
     if (!fread_be32(&db_text_encoding, stream)) {
@@ -33,6 +34,7 @@ int db_header_read(struct db *db, FILE *stream) {
     }
     fseek(stream, r, SEEK_SET);
 
+    // skip remaining header fields for now until we really need them
     if (fseek(stream, DB_HEADER_SIZE - DB_HEADER_STRING_LEN - sizeof(uint16_t),
               SEEK_CUR) != 0) {
         perror("fseek");

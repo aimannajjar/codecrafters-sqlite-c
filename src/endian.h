@@ -17,20 +17,22 @@ static inline int fread_varint(int64_t *out, FILE *stream) {
     // todo need to handle sign-extension for negative numbers
     int c = 0;
     *out = 0;
+    uint64_t acc = 0;
     for (int i = 0; i < 9; i++) {
         unsigned char b;
         if (fread(&b, 1, 1, stream) != 1) {
             return -1;
         }
         unsigned char mask = i < 8 ? 0x7f : 0xff;
-        *out <<= 7;
-        *out |= (b & mask);
+        acc <<= (i < 8) ? 7 : 8;
+        acc |= (b & mask);
         c++;
 
-        if (!(1 << 8 & b)) {
+        if (!(0x80 & b)) {
             break;
         }
     }
+    *out = (int64_t)acc;
     return c;
 }
 
