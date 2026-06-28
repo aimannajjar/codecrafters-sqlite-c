@@ -63,7 +63,10 @@ int main(int argc, char *argv[]) {
             }
 
             if (!cell.record->fields_count)
+            {
+                btree_tleaf_cell_free(&cell);
                 break;
+            }
 
             // we're interested in col0 and col2
             //  type sould be "table", tbl_name will contain the table name

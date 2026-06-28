@@ -24,14 +24,14 @@ int btree_header_read(struct btree_header *header, int first, FILE *stream) {
     }
 
     uint16_t cells_start;
-    if (fread_be16(&cells_start, stream) != 0) {
-        if (cells_start == 0) {
-            header->cell_content_start = 65536;
-        } else {
-            header->cell_content_start = cells_start;
-        }
-    } else {
+    if (!fread_be16(&cells_start, stream)) {
         return -1;
+    }
+
+    if (cells_start == 0) {
+        header->cell_content_start = 65536;
+    } else {
+        header->cell_content_start = cells_start;
     }
 
     if (fread(&header->free_bytes_fragments, 1, 1, stream) != 1) {
