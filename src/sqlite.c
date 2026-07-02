@@ -80,3 +80,4 @@ int sqlite_cmd_tables(struct db *db, FILE *database_file) {
     free(records);
     return 0;
 }
+

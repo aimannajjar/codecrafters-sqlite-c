@@ -34,12 +34,12 @@ int main(int argc, char *argv[]) {
             goto close;
         }
     } else if (strcmp(argv[2], ".tables") == 0) {
-        if (!sqlite_cmd_tables(&db, database_file)) {
+        if (sqlite_cmd_tables(&db, database_file)) {
             result = EXIT_FAILURE;
             goto close;
         }
     } else {
-        if (!sqlite_cmd_sql_stmt(argv[2], &db, database_file)) {
+        if (sqlite_cmd_sql_stmt(argv[2], &db, database_file)) {
             result = EXIT_FAILURE;
             goto close;
         }
