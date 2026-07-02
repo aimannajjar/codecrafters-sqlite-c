@@ -1,5 +1,6 @@
 #ifndef DATABASE_H
 #define DATABASE_H
+#include "page.h"
 #include <stdint.h>
 #include <stdio.h>
 
@@ -17,7 +18,18 @@ struct db {
     uint32_t change_counter;
 };
 
+struct schema_record {
+    char type[100];
+    char name[100];
+    char tbl_name[100];
+    uint64_t rootpge;
+    char sql[1024];
+};
+
 int db_header_read(struct db *buf, FILE *stream);
+int read_schema_page_header(struct btree_header *page_header,
+                            FILE *database_file);
+int read_schema_table(struct schema_record **records, FILE *database_file);
 
 extern uint16_t db_page_size;
 extern enum CHARSET_ENC db_text_encoding;

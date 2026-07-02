@@ -1,8 +1,11 @@
 #include "database.h"
 #include "endian.h"
+#include "page.h"
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 enum CHARSET_ENC {
     UTF8 = 1,
@@ -13,9 +16,8 @@ enum CHARSET_ENC {
 uint16_t db_page_size = 0;
 enum CHARSET_ENC db_text_encoding = -1;
 
-
-/** reads the initial bytes of sqlite files before the first page 
- ** these include the magic string, the page_size constant and 
+/** reads the initial bytes of sqlite files before the first page
+ ** these include the magic string, the page_size constant and
  ** text encoding among other fields
  **/
 int db_header_read(struct db *db, FILE *stream) {
@@ -30,7 +32,7 @@ int db_header_read(struct db *db, FILE *stream) {
     }
     db_page_size = db->page_size; // global since it's needed in many places
 
-    // parse encoding at byte 56 then go back 
+    // parse encoding at byte 56 then go back
     int r = ftell(stream);
     fseek(stream, 56, SEEK_SET);
     if (!fread_be32(&db_text_encoding, stream)) {
@@ -47,4 +49,139 @@ int db_header_read(struct db *db, FILE *stream) {
     }
 
     return 0;
+}
+
+/** Helper function to read the first page header, i.e. schema page's header
+ ** it will read the page header and populate cell_offsets
+ ** array, use btree_tleaf_cell_read to read individual cells
+ ** this assumes database_file is positioned at header position.
+ ** returns 0 on success, -1 otherwise
+ **/
+int read_schema_page_header(struct btree_header *page_header,
+                            FILE *database_file) {
+    if (btree_header_read(page_header, 1, database_file) != 0) {
+        puts("failed to parse page header");
+        btree_header_free(page_header);
+        return -1;
+    }
+
+    if (page_header->page_type != TABLE_LEAF_PAGE) {
+        puts("invalid first page");
+        btree_header_free(page_header);
+        return -1;
+    }
+
+    return 0;
+}
+
+/** reads the sqlite_schema page and allocates *records array pointed to by
+ ** the first parameter, returns the number of records or -1 on errors
+ */
+int read_schema_table(struct schema_record **records, FILE *database_file) {
+    struct btree_header schema_page_header;
+
+    if (read_schema_page_header(&schema_page_header, database_file)) {
+        return -1;
+    }
+
+    // let's parse sqlite_schema rows (located from first page which we
+    // already have) :
+    //
+    //  CREATE TABLE sqlite_schema (
+    //    type text,
+    //    name text,
+    //    tbl_name text,
+    //    rootpage integer,
+    //    sql text
+    //  );
+
+    // each cell is a row
+    struct schema_record *srecs =
+        malloc(schema_page_header.cells_count * sizeof **records);
+
+    if (!srecs) {
+        perror("malloc");
+        btree_header_free(&schema_page_header);
+        return -1;
+    }
+
+    size_t cells_len = schema_page_header.cells_count;
+    int row = 0;
+    for (row = 0; row < cells_len; row++) {
+        struct btree_tleaf_cell cell;
+        if (btree_tleaf_cell_read(&cell, &schema_page_header, row,
+                                  database_file)) {
+            puts("failed to parse schema page");
+            break;
+        }
+
+        // sqlite_schema has 5 columns
+        if (cell.record.fields_count != 5) {
+            printf("unexpected schema table row size: %d\n",
+                   cell.record.fields_count);
+            goto error;
+        }
+
+        for (int i = 0; i < cell.record.fields_count; i++) {
+            enum field_type field_type = cell.record.fields[i].type;
+            switch (i) {
+            // 'type' column
+            case 0:
+                if (field_type != FIELD_TYPE_TEXT) {
+                    printf("invalid schema field type row=%d,col=%d\n", row, i);
+                    goto error;
+                }
+                strncpy(srecs[row].type, cell.record.fields[i].data,
+                        sizeof(srecs[row].type));
+                srecs[row].type[sizeof srecs[row].type - 1] = '\0';
+                break;
+            // 'name' column
+            case 1:
+                if (field_type != FIELD_TYPE_TEXT) {
+                    printf("invalid schema field type row=%d,col=%d\n", row, i);
+                    goto error;
+                }
+                strncpy(srecs[row].name, cell.record.fields[i].data,
+                        sizeof(srecs[row].name));
+                srecs[row].name[sizeof srecs[row].name - 1] = '\0';
+                break;
+            // 'tbl_name' column
+            case 2:
+                if (field_type != FIELD_TYPE_TEXT) {
+                    printf("invalid schema field type row=%d,col=%d\n", row, i);
+                    goto error;
+                }
+                strncpy(srecs[row].tbl_name, cell.record.fields[i].data,
+                        sizeof(srecs[row].tbl_name));
+                srecs[row].tbl_name[sizeof srecs[row].tbl_name - 1] = '\0';
+                break;
+            // 'rootpage' column
+            case 3:
+                if (field_type != FIELD_TYPE_NUMBER) {
+                    printf("invalid schema field type row=%d,col=%d\n", row, i);
+                    goto error;
+                }
+                srecs[row].rootpge = cell.record.fields[i].number;
+                break;
+            case 4:
+                if (field_type != FIELD_TYPE_TEXT) {
+                    printf("invalid schema field type row=%d,col=%d\n", row, i);
+                    goto error;
+                }
+                strncpy(srecs[row].sql, cell.record.fields[i].data,
+                        sizeof(srecs[row].sql));
+                srecs[row].sql[sizeof srecs[row].sql - 1] = '\0';
+                break;
+            }
+        }
+        btree_tleaf_cell_free(&cell);
+    }
+    btree_header_free(&schema_page_header);
+    *records = srecs;
+    return cells_len;
+
+error:
+    btree_header_free(&schema_page_header);
+    free(srecs);
+    return -1;
 }
