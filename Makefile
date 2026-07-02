@@ -9,3 +9,9 @@ clean_build:
 	cmake -B build -G Ninja
 	cmake --build build
 
+clean_build_debug:
+	rm -rf build
+	mkdir build
+	cmake -DCMAKE_BUILD_TYPE=debug -B build -G Ninja
+	cmake --build build
+

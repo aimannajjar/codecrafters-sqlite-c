@@ -58,5 +58,6 @@ int btree_header_free(struct btree_header *header);
 int btree_tleaf_cell_free(struct btree_tleaf_cell *cell);
 int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
                           struct btree_header *header, int index, FILE *stream);
+void record_fields_free(struct field *fields, size_t len);
 
 #endif

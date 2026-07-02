@@ -1,0 +1,1 @@
+- Revise cleanup on errors for functions in sqlite.c and page.c 

@@ -1,5 +1,5 @@
 #include "database.h"
-#include "page.h"
+#include "sqlite.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,6 +14,7 @@ int main(int argc, char *argv[]) {
     const char *database_file_path = argv[1];
     const char *command = argv[2];
 
+
     FILE *database_file = fopen(database_file_path, "rb");
     if (!database_file) {
         perror(argv[1]);
@@ -23,65 +24,21 @@ int main(int argc, char *argv[]) {
     struct db db;
     if (db_header_read(&db, database_file) != 0) {
         puts("failed to parse header");
-        result = EXIT_FAILURE;
+        result = -1;
         goto close;
     }
 
-    struct btree_header first_page;
-    if (btree_header_read(&first_page, 1, database_file) != 0) {
-        puts("failed to parse page header");
-        result = EXIT_FAILURE;
-        goto close;
-    }
-
-    if (first_page.page_type != TABLE_LEAF_PAGE) {
-        puts("invalid first page");
-        goto free_header;
-    }
-
-    if (strcmp(command, ".dbinfo") == 0) {
-        printf("database page size: %u\n", (unsigned)db.page_size);
-        printf("number of tables: %u\n", (unsigned)first_page.cells_count);
-    } else if (strcmp(command, ".tables") == 0) {
-
-        // let's parse sqlite_schema rows (located from first page which we
-        // already have) :
-        //
-        //  CREATE TABLE sqlite_schema (
-        //    type text,
-        //    name text,
-        //    tbl_name text,
-        //    rootpage integer,
-        //    sql text
-        //  );
-
-        // each cell is a row
-        for (int r = 0; r < first_page.cells_count; r++) {
-            struct btree_tleaf_cell cell;
-            if (btree_tleaf_cell_read(&cell, &first_page, r, database_file)) {
-                puts("failed to parse schema page");
-                break;
-            }
-
-            if (!cell.record.fields_count)
-            {
-                btree_tleaf_cell_free(&cell);
-                break;
-            }
-
-            // we're interested in col0 and col2
-            //  type sould be "table", tbl_name will contain the table name
-            if (cell.record.fields[0].type == FIELD_TYPE_TEXT &&
-                strcmp(cell.record.fields[0].data, "table") == 0) {
-                printf("%s\t", cell.record.fields[2].data);
-            }
-            btree_tleaf_cell_free(&cell);
+    if (strcmp(argv[2], ".dbinfo") == 0) {
+        if (!sqlite_cmd_dbinfo(&db, database_file)) {
+            result = EXIT_FAILURE;
+            goto close;
         }
-        puts("");
+    } else if (strcmp(argv[2], ".tables") == 0) {
+        if (!sqlite_cmd_tables(&db, database_file)) {
+            result = EXIT_FAILURE;
+            goto close;
+        }
     }
-
-free_header:
-    btree_header_free(&first_page);
 
 close:
     fclose(database_file);

@@ -13,6 +13,11 @@ enum CHARSET_ENC {
 uint16_t db_page_size = 0;
 enum CHARSET_ENC db_text_encoding = -1;
 
+
+/** reads the initial bytes of sqlite files before the first page 
+ ** these include the magic string, the page_size constant and 
+ ** text encoding among other fields
+ **/
 int db_header_read(struct db *db, FILE *stream) {
 
     if (fread(db->header_string, 1, DB_HEADER_STRING_LEN, stream) !=
