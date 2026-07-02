@@ -21,20 +21,20 @@ struct btree_header {
     long page_start; // absolute poistion in file
 };
 
-struct btree_tleaf_cell {
-    int64_t payload_size;
-    int64_t rowid;
-    unsigned char *payload;
-    uint32_t overflow_page_number;
-    struct record *record;
-};
-
 // records are basically rows
 struct record {
     long record_start;
     int64_t header_size;
     uint32_t fields_count;
     struct field *fields;
+};
+
+struct btree_tleaf_cell {
+    int64_t payload_size;
+    int64_t rowid;
+    unsigned char *payload;
+    uint32_t overflow_page_number;
+    struct record record;
 };
 
 enum field_type {

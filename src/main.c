@@ -62,7 +62,7 @@ int main(int argc, char *argv[]) {
                 puts("failed to parse schema page");
             }
 
-            if (!cell.record->fields_count)
+            if (!cell.record.fields_count)
             {
                 btree_tleaf_cell_free(&cell);
                 break;
@@ -70,9 +70,9 @@ int main(int argc, char *argv[]) {
 
             // we're interested in col0 and col2
             //  type sould be "table", tbl_name will contain the table name
-            if (cell.record->fields[0].type == FIELD_TYPE_TEXT &&
-                strcmp(cell.record->fields[0].data, "table") == 0) {
-                printf("%s\t", cell.record->fields[2].data);
+            if (cell.record.fields[0].type == FIELD_TYPE_TEXT &&
+                strcmp(cell.record.fields[0].data, "table") == 0) {
+                printf("%s\t", cell.record.fields[2].data);
             }
             btree_tleaf_cell_free(&cell);
         }

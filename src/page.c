@@ -52,8 +52,8 @@ int btree_header_read(struct btree_header *header, int first, FILE *stream) {
         return -1;
     }
 
-    for (int i = 0; i < header->cells_count; i++) {
-        if (!fread_be16(header->cell_offsets + i, stream)) {
+    for (size_t i = 0; i < header->cells_count; i++) {
+        if (!fread_be16(&header->cell_offsets[i], stream)) {
             return -1;
         }
     }
@@ -75,7 +75,7 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
         return -1;
     }
 
-    struct record *record = malloc(sizeof *record);
+    struct record *record = &cell->record; // aliasing for readability
     record->record_start = ftell(stream);
     int c;
     if ((c = fread_varint(&record->header_size, stream)) <= 0)
@@ -130,18 +130,23 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
                 .type = FIELD_TYPE_NUMBER,
             };
 
+            int64_t val = 0;
             switch (column_types[i]) {
             case 1:
-                f.number = fgetc(stream);
+                val = fgetc(stream);
                 break;
             case 2:
-                fread_be16((uint16_t *)&f.number, stream);
+                uint16_t val16;
+                fread_be16(&val16, stream);
+                val = val16;
                 break;
             case 3:
                 fseek(stream, 3, SEEK_CUR); // todo read be24
                 break;
             case 4:
-                fread_be32((uint32_t *)&f.number, stream);
+                uint32_t val32;
+                fread_be32(&val32, stream);
+                val = val32;
                 break;
             case 5:
                 fseek(stream, 6, SEEK_CUR); // todo read be48
@@ -154,6 +159,7 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
                 break;
             }
 
+            f.number = val;
             fields[i] = f;
         }
     }
@@ -164,8 +170,6 @@ overflow:
         return -1;
     }
 
-    cell->record = record;
-
     return 0;
 }
 
@@ -175,11 +179,10 @@ int btree_header_free(struct btree_header *header) {
 }
 
 int btree_tleaf_cell_free(struct btree_tleaf_cell *cell) {
-    for (int i = 0; i < cell->record->fields_count; i++) {
-        if (cell->record->fields[i].type != FIELD_TYPE_NUMBER)
-            free(cell->record->fields[i].data);
+    for (int i = 0; i < cell->record.fields_count; i++) {
+        if (cell->record.fields[i].type != FIELD_TYPE_NUMBER)
+            free(cell->record.fields[i].data);
     }
-    free(cell->record->fields);
-    free(cell->record);
+    free(cell->record.fields);
     return 0;
 }
