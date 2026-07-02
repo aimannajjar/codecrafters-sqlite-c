@@ -22,7 +22,7 @@ struct schema_record {
     char type[100];
     char name[100];
     char tbl_name[100];
-    uint64_t rootpge;
+    uint64_t rootpage;
     char sql[1024];
 };
 

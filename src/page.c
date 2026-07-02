@@ -52,10 +52,13 @@ int btree_header_read(struct btree_header *header, int first, FILE *stream) {
         }
     }
 
-    header->cell_offsets = malloc(sizeof(uint16_t) * header->cells_count);
-    if (header->cell_offsets == nullptr) {
-        perror("malloc");
-        return -1;
+    header->cell_offsets = NULL;
+    if (header->cells_count) {
+        header->cell_offsets = malloc(sizeof(uint16_t) * header->cells_count);
+        if (header->cell_offsets == nullptr) {
+            perror("malloc");
+            return -1;
+        }
     }
 
     for (size_t i = 0; i < header->cells_count; i++) {
@@ -224,7 +227,8 @@ overflow:
  ** only any dynamic objects inside it
  */
 int btree_header_free(struct btree_header *header) {
-    free(header->cell_offsets);
+    if (header->cells_count)
+        free(header->cell_offsets);
     header->cell_offsets = NULL;
     return 0;
 }

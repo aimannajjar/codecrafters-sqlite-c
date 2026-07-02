@@ -13,10 +13,11 @@ enum CHARSET_ENC {
     UTF_16BE,
 };
 
-uint16_t db_page_size = 0;
 enum CHARSET_ENC db_text_encoding = -1;
 
-/** reads the initial bytes of sqlite files before the first page
+/** reads the initial bytes of sqlite files, this is typically part
+ ** of the first page, but instead we read it separately here, and
+ ** then we offset the first page DB_HEADER_SIZE
  ** these include the magic string, the page_size constant and
  ** text encoding among other fields
  **/
@@ -30,7 +31,6 @@ int db_header_read(struct db *db, FILE *stream) {
     if (!fread_be16(&db->page_size, stream)) {
         return -1;
     }
-    db_page_size = db->page_size; // global since it's needed in many places
 
     // parse encoding at byte 56 then go back
     int r = ftell(stream);
@@ -161,7 +161,7 @@ int read_schema_table(struct schema_record **records, FILE *database_file) {
                     printf("invalid schema field type row=%d,col=%d\n", row, i);
                     goto error;
                 }
-                srecs[row].rootpge = cell.record.fields[i].number;
+                srecs[row].rootpage = cell.record.fields[i].number;
                 break;
             case 4:
                 if (field_type != FIELD_TYPE_TEXT) {

@@ -6,5 +6,6 @@
 
 int sqlite_cmd_dbinfo(struct db *db, FILE *database_file);
 int sqlite_cmd_tables(struct db *db, FILE *database_file);
+int sqlite_cmd_sql_stmt(const char *stmt, struct db *db, FILE *database_file);
 
 #endif
