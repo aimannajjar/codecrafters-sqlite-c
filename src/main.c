@@ -29,7 +29,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (strcmp(argv[2], ".dbinfo") == 0) {
-        if (!sqlite_cmd_dbinfo(&db, database_file)) {
+        if (sqlite_cmd_dbinfo(&db, database_file)) {
             result = EXIT_FAILURE;
             goto close;
         }
