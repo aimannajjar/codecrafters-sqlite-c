@@ -36,7 +36,7 @@ int main(int argc, char *argv[]) {
 
     if (first_page.page_type != TABLE_LEAF_PAGE) {
         puts("invalid first page");
-        goto close;
+        goto free_header;
     }
 
     if (strcmp(command, ".dbinfo") == 0) {
@@ -60,6 +60,7 @@ int main(int argc, char *argv[]) {
             struct btree_tleaf_cell cell;
             if (btree_tleaf_cell_read(&cell, &first_page, r, database_file)) {
                 puts("failed to parse schema page");
+                break;
             }
 
             if (!cell.record.fields_count)

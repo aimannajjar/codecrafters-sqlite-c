@@ -137,7 +137,10 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
                 break;
             case 2:
                 uint16_t val16;
-                fread_be16(&val16, stream);
+                if (!fread_be16(&val16, stream)) {
+                    puts("error parsing numerical field of serial type 2");
+                    break;
+                }
                 val = val16;
                 break;
             case 3:
@@ -145,7 +148,10 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
                 break;
             case 4:
                 uint32_t val32;
-                fread_be32(&val32, stream);
+                if (!fread_be32(&val32, stream)) {
+                    puts("error parsing numerical field of serial type 2");
+                    break;
+                }
                 val = val32;
                 break;
             case 5:

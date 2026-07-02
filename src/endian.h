@@ -4,6 +4,9 @@
 #include <stdint.h>
 #include <stdio.h>
 
+/** read unsigned int in big-endian encoding 
+ *  returns 0 on error, and 1 on success
+ */
 static inline int fread_be16(uint16_t *out, FILE *stream) {
     unsigned char buf[2];
     if (fread(buf, 1, 2, stream) < 2)
@@ -13,6 +16,11 @@ static inline int fread_be16(uint16_t *out, FILE *stream) {
     return 1;
 }
 
+/** read big-endian variable-length int
+ *  encoded using Huffman-style encoding
+ *  returns number of integer size on success
+ *  -1 otherwise
+ */
 static inline int fread_varint(int64_t *out, FILE *stream) {
     // todo need to handle sign-extension for negative numbers
     int c = 0;
