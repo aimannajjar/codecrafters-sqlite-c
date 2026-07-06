@@ -88,6 +88,7 @@ int sql_parse(char *sql, struct sql_query *query) {
             } else if (query->command == COMMAND_CREATE) {
                 if (strcmp(tok, "table") != 0) {
                     // we only support create table so far
+                    fputs("only create table supported currently", stderr);
                     goto invalid;
                 }
             }
@@ -110,6 +111,7 @@ int sql_parse(char *sql, struct sql_query *query) {
                 }
 
                 if (sql_create_spec_parse(create_spec, query)) {
+                    fputs("error parsing create sql stmt", stderr);
                     goto invalid;
                 }
             } else if (query->command & (COMMAND_SELECT | COMMAND_SELECT_COUNT |
@@ -122,6 +124,7 @@ int sql_parse(char *sql, struct sql_query *query) {
     } while ((tok = strtok(NULL, " ")));
 
     if (query->table[0] == '\0' || query->command == COMMAND_INVALID) {
+        fputs("could determine target table or sql command", stderr);
     invalid:
         fputs("invalid SQL statement\n", stderr);
         return -1;
