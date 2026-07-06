@@ -12,30 +12,33 @@ void strtolower(char *s) {
     }
 }
 
+#define KEYWORD_MATCH(token, keyword)                                          \
+    (!strcmp(keyword, token) || !strcmp(keyword ",", token))
+
+static inline bool is_sql_keyword(char *tok) {
+    return (KEYWORD_MATCH(tok, "primary") || KEYWORD_MATCH(tok, "key"));
+}
+
 int sql_create_spec_parse(char *spec, struct sql_query *query) {
     // for now we're only interested in field names and not types
     query->fields[0] = 0;
-    if (spec[0] && spec[0] == '(')
-        spec++;
-
-    char *tok = strtok(spec, " ");
+    char *tok = strtok(spec, " ,()");
     if (!tok)
         goto invalid;
 
     int i = 0;
     int offset = 0;
     do {
-        if (!strcmp(tok, "(") || !strcmp(tok, ")"))
+        strtolower(tok);
+        if (is_sql_keyword(tok))
             continue;
-
 
         if (i++ & 1)
             // this is a field type
             continue;
 
-        const char *fmt = (i-1 == 0) ? "%s" : ",%s";
+        const char *fmt = (i - 1 == 0) ? "%s" : ",%s";
 
-        strtolower(tok);
         int c = snprintf(query->fields + offset, sizeof query->fields - offset,
                          fmt, tok);
         if (c < 0 || c >= sizeof query->fields - offset) {
@@ -44,7 +47,7 @@ int sql_create_spec_parse(char *spec, struct sql_query *query) {
         }
         offset += c;
 
-    } while ((tok = strtok(NULL, " ")));
+    } while ((tok = strtok(NULL, " ,()")));
 
     return 0;
 invalid:
@@ -85,7 +88,6 @@ int sql_parse(char *sql, struct sql_query *query) {
             } else if (query->command == COMMAND_CREATE) {
                 if (strcmp(tok, "table") != 0) {
                     // we only support create table so far
-                    printf("B\n");
                     goto invalid;
                 }
             }
@@ -99,9 +101,15 @@ int sql_parse(char *sql, struct sql_query *query) {
         case 3:
             if (query->command == COMMAND_CREATE) {
                 // consume all remaining tokens to put hem in field list
-                char *create_spec = strtok(NULL, "");
+                char *create_spec_tokens = strtok(NULL, "");
+                char create_spec[FIELDS_LIST_MAX_LEN];
+                int c = snprintf(create_spec, sizeof create_spec, "%s %s", tok, create_spec_tokens);
+                if (c <= 0 || c >= sizeof create_spec) {
+                    fputs("error parsing create sql stmt", stderr);
+                    goto invalid;
+                }
+
                 if (sql_create_spec_parse(create_spec, query)) {
-                    printf("C\n");
                     goto invalid;
                 }
             } else if (query->command & (COMMAND_SELECT | COMMAND_SELECT_COUNT |
