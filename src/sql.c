@@ -22,6 +22,7 @@ static inline bool is_sql_keyword(char *tok) {
 int sql_create_spec_parse(char *spec, struct sql_query *query) {
     // for now we're only interested in field names and not types
     query->fields[0] = 0;
+    query->fields_count = 0;
     char *tok = strtok(spec, " ,()");
     if (!tok)
         goto invalid;
@@ -46,6 +47,7 @@ int sql_create_spec_parse(char *spec, struct sql_query *query) {
             goto invalid;
         }
         offset += c;
+        query->fields_count++;
 
     } while ((tok = strtok(NULL, " ,()")));
 
@@ -62,6 +64,7 @@ int sql_parse(char *sql, struct sql_query *query) {
     int i = 0;
     tok = strtok(sql, " ");
     query->table[0] = '\0';
+    query->fields[0] = '\0';
     query->command = COMMAND_INVALID;
 
     if (!tok)
@@ -82,7 +85,44 @@ int sql_parse(char *sql, struct sql_query *query) {
                 if (strcmp(tok, "count(*)") == 0) {
                     query->command = COMMAND_SELECT_COUNT;
                 } else {
-                    strncpy(query->fields, tok, FIELDS_LIST_MAX_LEN - 1);
+                    // consume all tokens until "from"
+                    int offset = 0;
+                    int j = 0;
+                    query->fields_count = 0;
+                    do {
+                        if (!strcmp(tok, "from")) {
+                            i++; // we've already consumed extra "from" token
+                            break;
+                        }
+
+                        char *ptr = NULL;
+                        char *field_token = strtok_r(tok, ",", &ptr);
+                        if (!field_token)
+                            goto invalid;
+
+                        do {
+
+                            char *fmt =
+                                (j++ == 0 || query->fields[offset - 1] == ',')
+                                    ? "%s"
+                                    : ",%s";
+
+                            int c = snprintf(query->fields + offset,
+                                             sizeof query->fields - offset, fmt,
+                                             field_token);
+                            query->fields_count++;
+
+                            if (c <= 0 || c >= sizeof query->fields - offset) {
+                                fputs("error building field list or field list "
+                                      "too "
+                                      "big",
+                                      stderr);
+                                return -1;
+                            }
+                            offset += c;
+                        } while ((field_token = strtok_r(NULL, ",", &ptr)));
+
+                    } while ((tok = strtok(NULL, " ")));
                     query->fields[sizeof query->fields - 1] = 0;
                 }
             } else if (query->command == COMMAND_CREATE) {
@@ -104,7 +144,8 @@ int sql_parse(char *sql, struct sql_query *query) {
                 // consume all remaining tokens to put hem in field list
                 char *create_spec_tokens = strtok(NULL, "");
                 char create_spec[FIELDS_LIST_MAX_LEN];
-                int c = snprintf(create_spec, sizeof create_spec, "%s %s", tok, create_spec_tokens);
+                int c = snprintf(create_spec, sizeof create_spec, "%s %s", tok,
+                                 create_spec_tokens);
                 if (c <= 0 || c >= sizeof create_spec) {
                     fputs("error parsing create sql stmt", stderr);
                     goto invalid;

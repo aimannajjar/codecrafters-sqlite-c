@@ -57,22 +57,61 @@ static int sqlite_sql_stmt_exec_select(struct schema_record *schema,
     size_t row_count = page_header->cells_count;
     int row = 0;
 
-    // parse the create sql statement from schema to figure out field index
-    // currently supporting single field
-    int fieldp = 0;
-    struct sql_query q;
-    sql_parse(schema->sql, &q);
-    char *field_tok = strtok(q.fields, ",");
-    while (field_tok && strcmp(field_tok, query->fields)) {
-        fieldp++;
-        field_tok = strtok(NULL, ",");
-    }
+    int fieldp[SELECT_MAX_FIELD_COUNT];
 
-    if (!field_tok) {
-        fprintf(stderr, "table %s: column '%s' not found\n", query->table,
-                query->fields);
+    struct sql_query schema_query;
+    sql_parse(schema->sql, &schema_query);
+
+    char *select_ptr = NULL;
+    char *select_field = strtok_r(query->fields, ",", &select_ptr);
+    if (!select_field) {
+        fputs("select field empty", stderr);
         return -1;
     }
+    // simplistic nested search , room for optimzation
+    int i = 0;
+    do {
+        fieldp[i] = -1;
+
+        // iterate through the create table schema to find 
+        // the index of each requested field 
+        // make copy of the fields to allow multiple searches
+        char *schema_ptr = NULL;
+        char *schema_fields = strdup(schema_query.fields);
+        if (!schema_fields) {
+            perror("error searching fields list");
+            return -1;
+        }
+
+        // tokenize fields list
+        char *schema_field = strtok_r(schema_fields, ",", &schema_ptr);
+        int j = 0;
+        if (!schema_field) {
+            free(schema_fields);
+            fputs("empty field list in create schema\n", stderr);
+            return -1;
+        }
+
+        // search lineraly
+        do {
+            if (!strcmp(select_field, schema_field)) {
+                fieldp[i] = j;
+                break;
+            }
+            j++;
+        } while ((schema_field = strtok_r(NULL, ",", &schema_ptr)));
+
+        // if fieldp default -1 value hasn't changed it means we haven't 
+        // the field in create schema
+        if (fieldp[i] == -1) {
+            fprintf(stderr, "table %s: column '%s' not found\n", query->table,
+                    select_field);
+            free(schema_fields);
+            return -1;
+        }
+        i++;
+        free(schema_fields);
+    } while ((select_field = strtok_r(NULL, ",", &select_ptr)));
 
     // find fields position
     for (row = 0; row < row_count; row++) {
@@ -82,18 +121,28 @@ static int sqlite_sql_stmt_exec_select(struct schema_record *schema,
             break;
         }
 
-        if (fieldp >= cell.record.fields_count) {
-            fputs("field parsing failed: field index out of bounds", stderr);
-            btree_tleaf_cell_free(&cell);
-            return -1;
-        }
+        for (int i = 0; i < query->fields_count; i++) {
+            int fp = fieldp[i];
+            if (i > 0)
+                putchar('|');
 
-        struct field *f = &cell.record.fields[fieldp];
-        if (f->type == FIELD_TYPE_TEXT) {
-            printf("%s\n", f->data);
-        } else if (f->type == FIELD_TYPE_NUMBER) {
-            printf("%ld\n", f->number);
+            if (fp < 0 || fp >= cell.record.fields_count) {
+                fprintf(stderr,
+                        "field parsing failed: field index %d out of bounds\n",
+                        fp);
+                btree_tleaf_cell_free(&cell);
+                return -1;
+            }
+
+            struct field *f = &cell.record.fields[fp];
+            if (f->type == FIELD_TYPE_TEXT) {
+                printf("%s", f->data);
+            } else if (f->type == FIELD_TYPE_NUMBER) {
+                printf("%ld", f->number);
+            }
         }
+        puts("");
+
         btree_tleaf_cell_free(&cell);
     }
     return 0;
