@@ -203,8 +203,19 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
             case 6:
                 fseek(stream, 8, SEEK_CUR); // todo read be64
                 break;
+            case 7:
+                //todo big endian floating numbers
+                fseek(stream, 8, SEEK_CUR); // todo read be64
+                break;
+            case 8:
+                val = 0;
+                break;
+            case 9:
+                val = 1;
+                break;
             default:
-                puts("invalid serial type encountered");
+                printf("invalid serial type encountered: 0x%lx\n",
+                       column_types[i]);
                 break;
             }
 
@@ -216,7 +227,8 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
 
 overflow:
     if (fread_be32(&cell->overflow_page_number, stream) <= 0) {
-        return -1;
+        // TODO follow overflows
+        // return -1;
     }
 
     return 0;
