@@ -16,11 +16,22 @@ int main(int argc, char *argv[]) {
 
 
     FILE *database_file = fopen(database_file_path, "rb");
+    
     if (!database_file) {
         perror(argv[1]);
         return 1;
     }
 
+    // Dump entire content of database_file in hex
+    int ch;
+    while ((ch = fgetc(database_file)) != EOF) {
+        printf("%02x", ch);
+    }
+    printf("\n");
+    rewind(database_file);
+
+    // Bash command to convert hexdump back to binary:
+    // ./a.out | xxd -r -p > output.bin
     struct db db;
     if (db_header_read(&db, database_file) != 0) {
         puts("failed to parse header");
