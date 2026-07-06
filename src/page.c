@@ -171,6 +171,9 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
 
             int64_t val = 0;
             switch (column_types[i]) {
+            case 0:
+                val = 0; // for now using 0 as SQL NULL 
+                break;
             case 1:
                 val = fgetc(stream);
                 break;
