@@ -133,12 +133,18 @@ static int sqlite_sql_stmt_exec_select(struct schema_record *schema,
         perror("error parsing schema");
         return -1;
     }
-    sqlite_find_fields(sql, query->fields, fieldp);
+    if (sqlite_find_fields(sql, query->fields, fieldp)) {
+        free(sql);
+        return -1;
+    }
 
     int wfieldp[SELECT_MAX_FIELD_COUNT];
     char **conditions = calloc(query->fields_count, sizeof(void *));
     if (query->command & COMMAND_SELECT_WHERE) {
-        sqlite_find_fields(schema->sql, query->where_fields_list, wfieldp);
+        if (sqlite_find_fields(schema->sql, query->where_fields_list, wfieldp)) {
+            result = -1;
+            goto dealloc;
+        }
 
         // create inverted field-index to condition
         // if a field is not conditioned, the pointer will be NULL
