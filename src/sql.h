@@ -3,9 +3,12 @@
 
 #define TABLE_NAME_MAX_LEN 100
 #define FIELDS_LIST_MAX_LEN 1024
+#define FIELD_NAME_MAX_LEN 32
+#define FIELD_VALUE_TEXT_MAX_LEN 1024
+#define SELECT_MAX_FIELD_COUNT 20
 
 enum SQL_COMMAND {
-    COMMAND_INVALID = -1,
+    COMMAND_INVALID = 0,
     COMMAND_SELECT_COUNT = 2,
     COMMAND_INSERT = 4,
     COMMAND_SELECT = 8,
@@ -17,6 +20,10 @@ struct sql_query {
     char table[TABLE_NAME_MAX_LEN];
     char fields[FIELDS_LIST_MAX_LEN];
     int fields_count;
+    char where_fields_list[FIELDS_LIST_MAX_LEN];
+    char where_fields[SELECT_MAX_FIELD_COUNT][FIELD_NAME_MAX_LEN];
+    char where_values[SELECT_MAX_FIELD_COUNT][FIELD_VALUE_TEXT_MAX_LEN];
+    int where_fields_count;
     enum SQL_COMMAND command;
 };
 

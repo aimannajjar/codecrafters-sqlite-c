@@ -1,4 +1,5 @@
 #include "sql.h"
+#include "sqlite.h"
 #include <ctype.h>
 #include <stdatomic.h>
 #include <stdio.h>
@@ -81,7 +82,7 @@ int sql_parse(char *sql, struct sql_query *query) {
             }
             break;
         case 1:
-            if (query->command == COMMAND_SELECT) {
+            if (query->command & COMMAND_SELECT) {
                 if (strcmp(tok, "count(*)") == 0) {
                     query->command = COMMAND_SELECT_COUNT;
                 } else {
@@ -125,7 +126,7 @@ int sql_parse(char *sql, struct sql_query *query) {
                     } while ((tok = strtok(NULL, " ")));
                     query->fields[sizeof query->fields - 1] = 0;
                 }
-            } else if (query->command == COMMAND_CREATE) {
+            } else if (query->command & COMMAND_CREATE) {
                 if (strcmp(tok, "table") != 0) {
                     // we only support create table so far
                     fputs("only create table supported currently", stderr);
@@ -134,13 +135,13 @@ int sql_parse(char *sql, struct sql_query *query) {
             }
             break;
         case 2:
-            if (query->command == COMMAND_CREATE) {
+            if (query->command & COMMAND_CREATE) {
                 strncpy(query->table, tok, TABLE_NAME_MAX_LEN);
                 query->table[sizeof query->table - 1] = '\0';
             }
             break;
         case 3:
-            if (query->command == COMMAND_CREATE) {
+            if (query->command & COMMAND_CREATE) {
                 // consume all remaining tokens to put hem in field list
                 char *create_spec_tokens = strtok(NULL, "");
                 char create_spec[FIELDS_LIST_MAX_LEN];
@@ -161,11 +162,65 @@ int sql_parse(char *sql, struct sql_query *query) {
                 query->table[sizeof query->table - 1] = '\0';
             }
             break;
+        case 4:
+            if (query->command & COMMAND_SELECT) {
+                // assume single where clause condition
+                char *rest = strtok(NULL, "");
+                if (!rest) {
+                    fputs("parsing error", stderr);
+                    return -1;
+                }
+
+                char *where_tok = strtok(rest, "= '");
+                if (!where_tok) {
+                    fputs("where clause parsing error", stderr);
+                    return -1;
+                }
+
+                int offset = 0;
+                int i = 0;
+                do {
+                    strncpy(query->where_fields[i], where_tok,
+                            sizeof query->where_fields[i] - 1);
+                    query->where_fields[i][sizeof query->where_fields[i] - 1] =
+                        0;
+
+                    // for functions that search the field list as a string
+                    char *fmt = (i == 0) ? "%s" : ",%s";
+                    int c = snprintf(query->where_fields_list,
+                                     sizeof query->where_fields_list - offset,
+                                     fmt, where_tok);
+                    if (c <= 0 ||
+                        c >= sizeof query->where_fields_list - offset) {
+                        fputs("error while building filed list", stderr);
+                        return -1;
+                    }
+                    offset += c;
+
+                    where_tok = strtok(NULL, "= '");
+                    if (!where_tok) {
+                        fputs("expected value", stderr);
+                        return -1;
+                    }
+
+                    strncpy(query->where_values[i], where_tok,
+                            sizeof query->where_values[i] - 1);
+                    query->where_values[i][sizeof query->where_values[i] - 1] =
+                        0;
+                    i++;
+
+                } while ((where_tok = strtok(NULL, "= '")));
+                query->where_fields_count = i;
+                query->command |= COMMAND_SELECT_WHERE;
+            }
+            break;
         }
     } while ((tok = strtok(NULL, " ")));
 
-    if (query->table[0] == '\0' || query->command == COMMAND_INVALID) {
-        fputs("could determine target table or sql command", stderr);
+    if (query->table[0] == '\0' || query->command & COMMAND_INVALID) {
+        fprintf(stderr,
+                "could not determine target table or sql command: %s (%d)\n",
+                query->table, query->command);
     invalid:
         fputs("invalid SQL statement\n", stderr);
         return -1;
