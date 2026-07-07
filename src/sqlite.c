@@ -163,8 +163,7 @@ static int sqlite_sql_stmt_exec_select(char **conditions, int *wfieldp,
                 int fp = wfieldp[i];
                 struct field *f = &cell.record.fields[fp];
                 if (f->type == FIELD_TYPE_TEXT) {
-                    printf("field %d (%s) should = %s\n", fp, f->data,
-                           conditions[fp]);
+                    printf("field %d should = %s\n", fp, conditions[fp]);
                     if (conditions[fp] && strcmp(f->data, conditions[fp])) {
                         filtered = 1;
                     }
