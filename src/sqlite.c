@@ -196,41 +196,25 @@ static int sqlite_sql_stmt_exec_select(struct schema_record *schema,
 
         for (int i = 0; i < query->fields_count; i++) {
             int fp = fieldp[i];
-            if (i > 0) {
-                print_row[print_offset] = '|';
-                print_offset++;
-            }
+            if (i > 0)
+                putchar('|');
 
             if (fp < 0 || fp >= cell.record.fields_count) {
                 fprintf(stderr,
                         "field parsing failed: field index %d out of bounds\n",
                         fp);
                 btree_tleaf_cell_free(&cell);
-                result = -1;
-                goto dealloc;
+                return -1;
             }
 
             struct field *f = &cell.record.fields[fp];
-            int c = 0;
             if (f->type == FIELD_TYPE_TEXT) {
-                c = snprintf(print_row + print_offset,
-                             sizeof print_row - print_offset, "%s", f->data);
-
+                printf("%s", f->data);
             } else if (f->type == FIELD_TYPE_NUMBER) {
-                c = snprintf(print_row + print_offset,
-                             sizeof print_row - print_offset, "%ld", f->number);
-            }
-            print_offset += c;
-            if (c == 0 || c >= sizeof print_row - print_offset) {
-                fputs("results too big\n", stderr);
-                btree_tleaf_cell_free(&cell);
-                result = -1;
-                goto dealloc;
+                printf("%ld", f->number);
             }
         }
-        if (!filtered) {
-            puts(print_row);
-        }
+        puts("");
 
         btree_tleaf_cell_free(&cell);
     }
