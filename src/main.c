@@ -28,13 +28,11 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "---\n");
     while ((ch = fgetc(database_file)) != EOF) {
         fprintf(stderr, "%02x", ch);
-        if (!(i%125)) {
-            fputs("\n", stderr);
-        }
         i++;
     }
     fprintf(stderr, "---\n");
     rewind(database_file);
+    printf("total fie size is %d\n", i);
 
     // Bash command to convert hexdump back to binary:
     // ./a.out | xxd -r -p > output.bin
