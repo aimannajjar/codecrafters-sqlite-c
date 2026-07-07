@@ -91,6 +91,7 @@ int sql_parse(char *sql, struct sql_query *query) {
                     int j = 0;
                     query->fields_count = 0;
                     do {
+                        strtolower(tok);
                         if (!strcmp(tok, "from")) {
                             i++; // we've already consumed extra "from" token
                             break;
@@ -197,7 +198,8 @@ int sql_parse(char *sql, struct sql_query *query) {
                     }
                     offset += c;
 
-                    where_tok = strtok(NULL, "= '");
+                    where_tok = strtok(NULL, "='");
+                    where_tok = strtok(NULL, "='");
                     if (!where_tok) {
                         fputs("expected value", stderr);
                         return -1;
@@ -209,7 +211,7 @@ int sql_parse(char *sql, struct sql_query *query) {
                         0;
                     i++;
 
-                } while ((where_tok = strtok(NULL, "= '")));
+                } while ((where_tok = strtok(NULL, "='")));
                 query->where_fields_count = i;
                 query->command |= COMMAND_SELECT_WHERE;
             }
