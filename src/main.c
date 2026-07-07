@@ -25,7 +25,7 @@ int main(int argc, char *argv[]) {
     // Dump entire content of database_file in hex
     int ch;
     int i = 0;
-    printf("---\n");
+    fprintf(stderr, "---\n");
     while ((ch = fgetc(database_file)) != EOF) {
         fprintf(stderr, "%02x", ch);
         if (!(i%75)) {
@@ -33,7 +33,7 @@ int main(int argc, char *argv[]) {
         }
         i++;
     }
-    printf("---\n");
+    fprintf(stderr, "---\n");
     fprintf(stderr, "\n");
     rewind(database_file);
 
