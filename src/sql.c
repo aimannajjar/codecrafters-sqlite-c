@@ -214,7 +214,7 @@ int sql_parse(char *sql, struct sql_query *query) {
 
                 } while ((where_tok = strtok(NULL, "='")));
                 query->where_fields_count = i;
-                query->command = COMMAND_SELECT_WHERE;
+                query->command |= COMMAND_SELECT_WHERE;
             }
             break;
         }

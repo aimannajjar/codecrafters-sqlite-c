@@ -158,12 +158,12 @@ static int sqlite_sql_stmt_exec_select(char **conditions, int *wfieldp,
             continue;
         }
 
-        printf("QUERY TYPE IS 0x%02x\n", query->command);
         if (query->command & COMMAND_SELECT_WHERE) {
             for (int i = 0; i < query->where_fields_count; i++) {
                 int fp = wfieldp[i];
                 struct field *f = &cell.record.fields[fp];
                 if (f->type == FIELD_TYPE_TEXT) {
+                    printf("field %d should = %s\n", fp, conditions[fp]);
                     if (conditions[fp] && strcmp(f->data, conditions[fp])) {
                         filtered = 1;
                     }
