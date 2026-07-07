@@ -17,7 +17,7 @@ void strtolower(char *s) {
     (!strcmp(keyword, token) || !strcmp(keyword ",", token))
 
 static inline bool is_sql_keyword(char *tok) {
-    return (KEYWORD_MATCH(tok, "primary") || KEYWORD_MATCH(tok, "key"));
+    return (KEYWORD_MATCH(tok, "primary") || KEYWORD_MATCH(tok, "key") || KEYWORD_MATCH(tok, "autoincrement"));
 }
 
 int sql_create_spec_parse(char *spec, struct sql_query *query) {
