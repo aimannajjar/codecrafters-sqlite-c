@@ -27,7 +27,7 @@ int main(int argc, char *argv[]) {
     int i = 0;
     while ((ch = fgetc(database_file)) != EOF) {
         fprintf(stderr, "%02x", ch);
-        if (!(i%128)) {
+        if (!(i%32)) {
             puts("");
         }
     }
