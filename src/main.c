@@ -24,17 +24,16 @@ int main(int argc, char *argv[]) {
 
     // Dump entire content of database_file in hex
     int ch;
-    int i = 0;
+    int i = 1;
     fprintf(stderr, "---\n");
     while ((ch = fgetc(database_file)) != EOF) {
         fprintf(stderr, "%02x", ch);
-        if (!(i%75)) {
+        if (!(i%125)) {
             fputs("\n", stderr);
         }
         i++;
     }
     fprintf(stderr, "---\n");
-    fprintf(stderr, "\n");
     rewind(database_file);
 
     // Bash command to convert hexdump back to binary:
