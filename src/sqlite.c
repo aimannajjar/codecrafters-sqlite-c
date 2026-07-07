@@ -158,6 +158,7 @@ static int sqlite_sql_stmt_exec_select(char **conditions, int *wfieldp,
             continue;
         }
 
+        printf("QUERY TYPE IS 0x%02x\n", query->command);
         if (query->command & COMMAND_SELECT_WHERE) {
             for (int i = 0; i < query->where_fields_count; i++) {
                 int fp = wfieldp[i];

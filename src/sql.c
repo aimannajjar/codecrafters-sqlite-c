@@ -1,5 +1,4 @@
 #include "sql.h"
-#include "sqlite.h"
 #include <ctype.h>
 #include <stdatomic.h>
 #include <stdio.h>
