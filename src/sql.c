@@ -187,6 +187,7 @@ int sql_parse(char *sql, struct sql_query *query) {
                         0;
 
                     // for functions that search the field list as a string
+                    printf("where field %s\n", where_tok);
                     char *fmt = (i == 0) ? "%s" : ",%s";
                     int c = snprintf(query->where_fields_list,
                                      sizeof query->where_fields_list - offset,
@@ -198,13 +199,16 @@ int sql_parse(char *sql, struct sql_query *query) {
                     }
                     offset += c;
 
+
                     where_tok = strtok(NULL, "='");
                     where_tok = strtok(NULL, "='");
+
                     if (!where_tok) {
                         fputs("expected value", stderr);
                         return -1;
                     }
 
+                    printf("where value %s\n", where_tok);
                     strncpy(query->where_values[i], where_tok,
                             sizeof query->where_values[i] - 1);
                     query->where_values[i][sizeof query->where_values[i] - 1] =

@@ -132,50 +132,17 @@ sqlite_find_fields(struct sql_query *schema_query,
     return 0;
 }
 
-static int sqlite_sql_stmt_exec_select(struct schema_record *schema,
+static int sqlite_sql_stmt_exec_select(char **conditions, int *wfieldp,
+                                       int *fieldp,
                                        struct btree_header *page_header,
                                        struct sql_query *query,
                                        FILE *database_file) {
 
-    size_t row_count = page_header->cells_count;
     int result = 0;
+
+    size_t row_count = page_header->cells_count;
     int row = 0;
 
-    int fieldp[SELECT_MAX_FIELD_COUNT];
-    char *sql = strdup(schema->sql);
-
-    struct sql_query schema_query;
-    sql_parse(sql, &schema_query);
-
-    if (!sql) {
-        perror("error parsing schema");
-        return -1;
-    }
-    if (sqlite_find_fields(&schema_query, query->fields, fieldp)) {
-        free(sql);
-        return -1;
-    }
-
-    int wfieldp[SELECT_MAX_FIELD_COUNT];
-    char **conditions = calloc(schema_query.fields_count, sizeof(void *));
-    if (query->command & COMMAND_SELECT_WHERE) {
-
-        struct sql_query schema_ddl;
-        sql_parse(schema->sql, &schema_ddl);
-        if (sqlite_find_fields(&schema_ddl, query->where_fields_list,
-                               wfieldp)) {
-            result = -1;
-            goto dealloc;
-        }
-
-        // create inverted field-index to condition
-        // if a field is not conditioned, the pointer will be NULL
-        for (int i = 0; i < query->where_fields_count; i++) {
-            conditions[wfieldp[i]] = query->where_values[i];
-        }
-    }
-
-    // find fields position
     for (row = 0; row < row_count; row++) {
         bool filtered = 0;
         struct btree_tleaf_cell cell;
@@ -239,13 +206,11 @@ static int sqlite_sql_stmt_exec_select(struct schema_record *schema,
 
         btree_tleaf_cell_free(&cell);
     }
-dealloc:
-    free(sql);
     return result;
 }
 
-int sqlite_sql_stmt_exec_select_interiors(struct schema_record *schema,
-                                          struct sql_query *query,
+int sqlite_sql_stmt_exec_select_interiors(char **conditions, int *wfieldp,
+                                          int *fieldp, struct sql_query *query,
                                           struct btree_header *parent_page,
                                           struct db *db, FILE *database_file) {
     size_t child_count = parent_page->cells_count;
@@ -254,7 +219,8 @@ int sqlite_sql_stmt_exec_select_interiors(struct schema_record *schema,
         struct btree_header header;
         uint64_t pn = btree_tinterior_cell_read(parent_page, i, database_file);
         btree_header_read(db, &header, pn, database_file);
-        sqlite_sql_stmt_exec_select(schema, &header, query, database_file);
+        sqlite_sql_stmt_exec_select(conditions, wfieldp, fieldp, &header, query,
+                                    database_file);
     }
 
     return 0;
@@ -265,23 +231,60 @@ int sqlite_sql_stmt_exec(struct schema_record *schema, struct sql_query *query,
 
     struct btree_header page_header;
     int result = 0;
+
     btree_header_read(db, &page_header, schema->rootpage, database_file);
     if (query->command & COMMAND_SELECT_COUNT) {
         int count = sqlite_sql_stmt_exec_count(db, &page_header, database_file);
         printf("%d\n", count);
     } else if (query->command & COMMAND_SELECT) {
+        struct sql_query schema_query;
+        int fieldp[SELECT_MAX_FIELD_COUNT];
+        int wfieldp[SELECT_MAX_FIELD_COUNT];
+        char **conditions = NULL;
+        char *sql = strdup(schema->sql);
+
+        sql_parse(sql, &schema_query);
+
+        if (!sql) {
+            perror("error parsing schema");
+            return -1;
+        }
+        if (sqlite_find_fields(&schema_query, query->fields, fieldp)) {
+            free(sql);
+            return -1;
+        }
+
+        if (query->command & COMMAND_SELECT_WHERE) {
+            conditions = calloc(schema_query.fields_count, sizeof(void *));
+
+            struct sql_query schema_ddl;
+            sql_parse(schema->sql, &schema_ddl);
+            if (sqlite_find_fields(&schema_ddl, query->where_fields_list,
+                                   wfieldp)) {
+                result = -1;
+                goto free_header;
+            }
+
+            // create inverted field-index to condition
+            // if a field is not conditioned, the pointer will be NULL
+            for (int i = 0; i < query->where_fields_count; i++) {
+                conditions[wfieldp[i]] = query->where_values[i];
+            }
+        }
+
         if (page_header.page_type == TABLE_INTERIOR_PAGE) {
-            sqlite_sql_stmt_exec_select_interiors(schema, query, &page_header,
-                                                  db, database_file);
+            sqlite_sql_stmt_exec_select_interiors(conditions, wfieldp, fieldp,
+                                                  query, &page_header, db,
+                                                  database_file);
         } else {
-            sqlite_sql_stmt_exec_select(schema, &page_header, query,
-                                        database_file);
+            sqlite_sql_stmt_exec_select(conditions, wfieldp, fieldp,
+                                        &page_header, query, database_file);
         }
     }
 
 free_header:
     btree_header_free(&page_header);
-    return 0;
+    return result;
 }
 
 int sqlite_cmd_dbinfo(struct db *db, FILE *database_file) {
