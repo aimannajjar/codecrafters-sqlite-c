@@ -159,7 +159,7 @@ static int sqlite_sql_stmt_exec_select(char **conditions, int *wfieldp,
         }
 
         if (query->command & COMMAND_SELECT_WHERE) {
-            printf("QUEY TYPE IS COR\n");
+            printf("where field count: %d\n", query->where_fields_count);
             for (int i = 0; i < query->where_fields_count; i++) {
                 int fp = wfieldp[i];
                 struct field *f = &cell.record.fields[fp];
