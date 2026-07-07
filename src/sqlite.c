@@ -55,13 +55,10 @@ static void sqlite_sql_stmt_exec_count(struct btree_header *page_header) {
  ** and populate field_results with the index, or -1 if not found
  **/
 static int
-sqlite_find_fields(char *create_sql,
+sqlite_find_fields(struct sql_query *schema_query,
                    // TODO: Make this an array instead of comma-separated list
                    char *target_fields,
                    int field_results[SELECT_MAX_FIELD_COUNT]) {
-
-    struct sql_query schema_query;
-    sql_parse(create_sql, &schema_query);
 
     char *target_tokptr = NULL;
     char *target_field = strtok_r(target_fields, ",", &target_tokptr);
@@ -82,7 +79,7 @@ sqlite_find_fields(char *create_sql,
         // the index of each requested field
         // make copy of the fields to allow multiple searches
         char *schema_ptr = NULL;
-        char *schema_fields = strdup(schema_query.fields);
+        char *schema_fields = strdup(schema_query->fields);
         if (!schema_fields) {
             perror("error searching fields list");
             return -1;
@@ -129,19 +126,27 @@ static int sqlite_sql_stmt_exec_select(struct schema_record *schema,
 
     int fieldp[SELECT_MAX_FIELD_COUNT];
     char *sql = strdup(schema->sql);
+
+    struct sql_query schema_query;
+    sql_parse(sql, &schema_query);
+
     if (!sql) {
         perror("error parsing schema");
         return -1;
     }
-    if (sqlite_find_fields(sql, query->fields, fieldp)) {
+    if (sqlite_find_fields(&schema_query, query->fields, fieldp)) {
         free(sql);
         return -1;
     }
 
     int wfieldp[SELECT_MAX_FIELD_COUNT];
-    char **conditions = calloc(query->fields_count, sizeof(void *));
+    char **conditions = calloc(schema_query.fields_count, sizeof(void *));
     if (query->command & COMMAND_SELECT_WHERE) {
-        if (sqlite_find_fields(schema->sql, query->where_fields_list, wfieldp)) {
+
+        struct sql_query schema_ddl;
+        sql_parse(schema->sql, &schema_ddl);
+        if (sqlite_find_fields(&schema_ddl, query->where_fields_list,
+                               wfieldp)) {
             result = -1;
             goto dealloc;
         }
@@ -163,6 +168,28 @@ static int sqlite_sql_stmt_exec_select(struct schema_record *schema,
             fputs("failed to parse table page", stderr);
             break;
         }
+        for (int i = 0; i < query->where_fields_count; i++) {
+            int fp = wfieldp[i];
+            struct field *f = &cell.record.fields[fp];
+            if (f->type == FIELD_TYPE_TEXT) {
+                if (conditions[fp] && strcmp(f->data, conditions[fp])) {
+                    filtered = 1;
+                }
+
+            } else if (f->type == FIELD_TYPE_NUMBER) {
+                if (conditions[fp]) {
+                    int v = atoi(conditions[fp]);
+                    if (v != f->number) {
+                        filtered = 1;
+                        break;
+                    }
+                }
+            }
+        }
+        if (filtered) {
+            btree_tleaf_cell_free(&cell);
+            continue;
+        }
 
         for (int i = 0; i < query->fields_count; i++) {
             int fp = fieldp[i];
@@ -183,21 +210,10 @@ static int sqlite_sql_stmt_exec_select(struct schema_record *schema,
             struct field *f = &cell.record.fields[fp];
             int c = 0;
             if (f->type == FIELD_TYPE_TEXT) {
-                if (conditions[fp] && strcmp(f->data, conditions[fp])) {
-                    filtered = 1;
-                    break;
-                }
                 c = snprintf(print_row + print_offset,
                              sizeof print_row - print_offset, "%s", f->data);
-    
+
             } else if (f->type == FIELD_TYPE_NUMBER) {
-                if (conditions[fp]) {
-                    int v = atoi(conditions[fp]);
-                    if (v != f->number) {
-                        filtered = 1;
-                        break;
-                    }
-                }
                 c = snprintf(print_row + print_offset,
                              sizeof print_row - print_offset, "%ld", f->number);
             }
