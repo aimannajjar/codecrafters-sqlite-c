@@ -32,7 +32,7 @@ int main(int argc, char *argv[]) {
     while ((ch = fgetc(database_file)) != EOF) {
         fprintf(stderr, "%02x", ch);
         i++;
-        if (i == 628736) break;
+        if (i == startp - 1) break;
     }
     fprintf(stderr, "---\n");
     rewind(database_file);
