@@ -57,9 +57,9 @@ int db_header_read(struct db *db, FILE *stream) {
  ** this assumes database_file is positioned at header position.
  ** returns 0 on success, -1 otherwise
  **/
-int read_schema_page_header(struct btree_header *page_header,
+int read_schema_page_header(struct db *db, struct btree_header *page_header,
                             FILE *database_file) {
-    if (btree_header_read(page_header, 1, database_file) != 0) {
+    if (btree_header_read(db, page_header, 1, database_file) != 0) {
         puts("failed to parse page header");
         btree_header_free(page_header);
         return -1;
@@ -77,10 +77,10 @@ int read_schema_page_header(struct btree_header *page_header,
 /** reads the sqlite_schema page and allocates *records array pointed to by
  ** the first parameter, returns the number of records or -1 on errors
  */
-int read_schema_table(struct schema_record **records, FILE *database_file) {
+int read_schema_table(struct db *db, struct schema_record **records, FILE *database_file) {
     struct btree_header schema_page_header;
 
-    if (read_schema_page_header(&schema_page_header, database_file)) {
+    if (read_schema_page_header(db, &schema_page_header, database_file)) {
         return -1;
     }
 

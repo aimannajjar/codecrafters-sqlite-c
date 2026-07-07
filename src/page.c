@@ -1,5 +1,7 @@
 #include "page.h"
+#include "database.h"
 #include "endian.h"
+#include <assert.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -12,10 +14,17 @@
  ** that only appears in the first page. the `cell_offsets` array is
  ** allocated on the heap, call `btree_header_free` to deallocate it.
  */
-int btree_header_read(struct btree_header *header, int first, FILE *stream) {
-    header->page_start = ftell(stream);
-    if (first)
-        header->page_start -= 100;
+int btree_header_read(struct db *db, struct btree_header *header,
+                      int page_number, FILE *stream) {
+
+    assert(page_number && "page number should be 1-based");
+
+    header->page_start = (page_number - 1) * db->page_size;
+    fseek(stream, header->page_start, SEEK_SET);
+
+    if (page_number == 1)
+        fseek(stream, 100, SEEK_SET); // skip 100 byte head that's unique
+                                      // to first page
 
     if (fread(&header->page_type, 1, 1, stream) != 1) {
         return -1;
@@ -60,6 +69,7 @@ int btree_header_read(struct btree_header *header, int first, FILE *stream) {
             return -1;
         }
     }
+
 
     for (size_t i = 0; i < header->cells_count; i++) {
         if (!fread_be16(&header->cell_offsets[i], stream)) {

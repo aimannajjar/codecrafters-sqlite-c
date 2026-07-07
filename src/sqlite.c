@@ -23,7 +23,7 @@ int sqlite_cmd_sql_stmt(char *stmt, struct db *db, FILE *database_file) {
     // read sqlite_schema table;
     struct schema_record *records;
     int rlen;
-    if ((rlen = read_schema_table(&records, database_file)) < 0) {
+    if ((rlen = read_schema_table(db, &records, database_file)) < 0) {
         return -1;
     }
 
@@ -47,8 +47,23 @@ not_found:
     return -1;
 }
 
-static void sqlite_sql_stmt_exec_count(struct btree_header *page_header) {
-    printf("%d\n", page_header->cells_count);
+static int sqlite_sql_stmt_exec_count(struct db *db,
+                                      struct btree_header *page_header,
+                                      FILE *database_file) {
+    if (page_header->page_type == TABLE_LEAF_PAGE)
+        return page_header->cells_count;
+
+    size_t child_count = page_header->cells_count;
+    int count = 0;
+    for (int i = 0; i < child_count; i++) {
+        struct btree_header header;
+        uint64_t pn = btree_tinterior_cell_read(page_header, i, database_file);
+        btree_header_read(db, &header, pn, database_file);
+        count += sqlite_sql_stmt_exec_count(db, &header, database_file);
+        btree_header_free(&header);
+    }
+
+    return count;
 }
 
 /** Given a create sql statemnt and a list of desired fields
@@ -234,17 +249,11 @@ int sqlite_sql_stmt_exec_select_interiors(struct schema_record *schema,
                                           struct btree_header *parent_page,
                                           struct db *db, FILE *database_file) {
     size_t child_count = parent_page->cells_count;
-    uint64_t child_page_numbers[100] = {0};
-
-    for (int i = 0; i < child_count; i++) {
-        child_page_numbers[i] =
-            btree_tinterior_cell_read(parent_page, i, database_file);
-    }
 
     for (int i = 0; i < child_count; i++) {
         struct btree_header header;
-        fseek(database_file, child_page_numbers[i] * db->page_size, SEEK_SET);
-        btree_header_read(&header, 0, database_file);
+        uint64_t pn = btree_tinterior_cell_read(parent_page, i, database_file);
+        btree_header_read(db, &header, pn, database_file);
         sqlite_sql_stmt_exec_select(schema, &header, query, database_file);
     }
 
@@ -256,10 +265,10 @@ int sqlite_sql_stmt_exec(struct schema_record *schema, struct sql_query *query,
 
     struct btree_header page_header;
     int result = 0;
-    fseek(database_file, (schema->rootpage - 1) * db->page_size, SEEK_SET);
-    btree_header_read(&page_header, 0, database_file);
+    btree_header_read(db, &page_header, schema->rootpage, database_file);
     if (query->command & COMMAND_SELECT_COUNT) {
-        sqlite_sql_stmt_exec_count(&page_header);
+        int count = sqlite_sql_stmt_exec_count(db, &page_header, database_file);
+        printf("%d\n", count);
     } else if (query->command & COMMAND_SELECT) {
         if (page_header.page_type == TABLE_INTERIOR_PAGE) {
             sqlite_sql_stmt_exec_select_interiors(schema, query, &page_header,
@@ -278,7 +287,7 @@ free_header:
 int sqlite_cmd_dbinfo(struct db *db, FILE *database_file) {
     struct btree_header schema_page_header;
 
-    if (read_schema_page_header(&schema_page_header, database_file)) {
+    if (read_schema_page_header(db, &schema_page_header, database_file)) {
         return -1;
     }
 
@@ -291,7 +300,7 @@ int sqlite_cmd_dbinfo(struct db *db, FILE *database_file) {
 int sqlite_cmd_tables(struct db *db, FILE *database_file) {
     struct schema_record *records;
     int rlen;
-    if ((rlen = read_schema_table(&records, database_file)) < 0) {
+    if ((rlen = read_schema_table(db, &records, database_file)) < 0) {
         return -1;
     }
 
