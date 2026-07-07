@@ -29,7 +29,7 @@ int main(int argc, char *argv[]) {
     while ((ch = fgetc(database_file)) != EOF) {
         fprintf(stderr, "%02x", ch);
         if (!(i%75)) {
-            fputs("", stderr);
+            fputs("\n", stderr);
         }
         i++;
     }
