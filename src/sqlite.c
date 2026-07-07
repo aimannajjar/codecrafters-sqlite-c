@@ -123,6 +123,7 @@ sqlite_find_fields(struct sql_query *schema_query,
         // the field in create schema
         if (field_results[i] == -1) {
             fprintf(stderr, "column '%s' not found\n", target_field);
+            fprintf(stderr, "known fields are: %s\n", schema_query->fields);
             free(schema_fields);
             return -1;
         }
