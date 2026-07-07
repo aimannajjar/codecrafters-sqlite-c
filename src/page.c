@@ -84,10 +84,12 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
     fseek(stream, header->page_start + cell_offset, SEEK_SET);
 
     if (fread_varint(&cell->payload_size, stream) <= 0) {
+        fputs("failed to parse payload size\n", stderr);
         return -1;
     }
 
     if (fread_varint(&cell->rowid, stream) <= 0) {
+        fputs("failed to parse rowid rom payload\n", stderr);
         return -1;
     }
 
@@ -172,7 +174,7 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
             int64_t val = 0;
             switch (column_types[i]) {
             case 0:
-                val = 0; // for now using 0 as SQL NULL 
+                val = 0; // for now using 0 as SQL NULL
                 break;
             case 1:
                 val = fgetc(stream);
@@ -207,7 +209,7 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
                 fseek(stream, 8, SEEK_CUR); // todo read be64
                 break;
             case 7:
-                //todo big endian floating numbers
+                // todo big endian floating numbers
                 fseek(stream, 8, SEEK_CUR); // todo read be64
                 break;
             case 8:
@@ -219,7 +221,9 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
             default:
                 printf("invalid serial type encountered: 0x%lx\n",
                        column_types[i]);
-                break;
+                if (i > 0) // clean up previously allocated fields
+                    record_fields_free(fields, i - 1);
+                return -1;
             }
 
             f.number = val;
@@ -229,8 +233,8 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
     record->fields = fields;
 
 overflow:
-    if (fread_be32(&cell->overflow_page_number, stream) <= 0) {
-        // TODO follow overflows
+    if (fread_be32(&cell->overflow_page_number, stream) == 0) {
+        // fputs("could not read overflow page number\n", stderr);
         // return -1;
     }
 

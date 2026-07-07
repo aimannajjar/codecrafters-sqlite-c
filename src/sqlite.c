@@ -168,27 +168,30 @@ static int sqlite_sql_stmt_exec_select(struct schema_record *schema,
             fputs("failed to parse table page", stderr);
             break;
         }
-        for (int i = 0; i < query->where_fields_count; i++) {
-            int fp = wfieldp[i];
-            struct field *f = &cell.record.fields[fp];
-            if (f->type == FIELD_TYPE_TEXT) {
-                if (conditions[fp] && strcmp(f->data, conditions[fp])) {
-                    filtered = 1;
-                }
 
-            } else if (f->type == FIELD_TYPE_NUMBER) {
-                if (conditions[fp]) {
-                    int v = atoi(conditions[fp]);
-                    if (v != f->number) {
+        if (query->command & COMMAND_SELECT_WHERE) {
+            for (int i = 0; i < query->where_fields_count; i++) {
+                int fp = wfieldp[i];
+                struct field *f = &cell.record.fields[fp];
+                if (f->type == FIELD_TYPE_TEXT) {
+                    if (conditions[fp] && strcmp(f->data, conditions[fp])) {
                         filtered = 1;
-                        break;
+                    }
+
+                } else if (f->type == FIELD_TYPE_NUMBER) {
+                    if (conditions[fp]) {
+                        int v = atoi(conditions[fp]);
+                        if (v != f->number) {
+                            filtered = 1;
+                            break;
+                        }
                     }
                 }
             }
-        }
-        if (filtered) {
-            btree_tleaf_cell_free(&cell);
-            continue;
+            if (filtered) {
+                btree_tleaf_cell_free(&cell);
+                continue;
+            }
         }
 
         for (int i = 0; i < query->fields_count; i++) {
