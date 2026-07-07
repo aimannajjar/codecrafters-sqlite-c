@@ -25,6 +25,9 @@ int main(int argc, char *argv[]) {
     // Dump entire content of database_file in hex
     int ch;
     int i = 1;
+    int startp = 1257473 / 2;
+    fprintf(stderr, "DB STARTING FROM %d\n", startp);
+    fseek(database_file, startp, SEEK_SET);
     fprintf(stderr, "---\n");
     while ((ch = fgetc(database_file)) != EOF) {
         fprintf(stderr, "%02x", ch);
