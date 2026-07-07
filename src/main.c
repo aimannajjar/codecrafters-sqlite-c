@@ -27,6 +27,7 @@ int main(int argc, char *argv[]) {
     while ((ch = fgetc(database_file)) != EOF) {
         fprintf(stderr, "%02x", ch);
     }
+    printf("---\n");
     fprintf(stderr, "\n");
     rewind(database_file);
 
