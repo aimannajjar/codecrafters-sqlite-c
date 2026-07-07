@@ -53,11 +53,14 @@ struct field {
     };
 };
 
+void record_fields_free(struct field *fields, size_t len);
 int btree_header_read(struct btree_header *header, int first, FILE *stream);
 int btree_header_free(struct btree_header *header);
 int btree_tleaf_cell_free(struct btree_tleaf_cell *cell);
 int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
                           struct btree_header *header, int index, FILE *stream);
-void record_fields_free(struct field *fields, size_t len);
-
+int btree_cell_read(struct btree_tleaf_cell *cell, struct btree_header *header,
+                    int index, FILE *stream);
+int btree_tinterior_cell_read(struct btree_header *header, int index,
+                              FILE *stream);
 #endif

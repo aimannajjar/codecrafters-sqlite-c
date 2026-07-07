@@ -2,6 +2,7 @@
 #include "database.h"
 #include "page.h"
 #include "sql.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -120,6 +121,7 @@ static int sqlite_sql_stmt_exec_select(struct schema_record *schema,
                                        struct btree_header *page_header,
                                        struct sql_query *query,
                                        FILE *database_file) {
+
     size_t row_count = page_header->cells_count;
     int result = 0;
     int row = 0;
@@ -160,13 +162,17 @@ static int sqlite_sql_stmt_exec_select(struct schema_record *schema,
 
     // find fields position
     for (row = 0; row < row_count; row++) {
-        char print_row[1024];
-        int print_offset = 0;
         bool filtered = 0;
         struct btree_tleaf_cell cell;
         if (btree_tleaf_cell_read(&cell, page_header, row, database_file)) {
-            fputs("failed to parse table page", stderr);
+            fputs("failed to parse table page\n", stderr);
             break;
+        }
+
+        if (!cell.record.fields_count) {
+            // skipping empty cell
+            btree_tleaf_cell_free(&cell);
+            continue;
         }
 
         if (query->command & COMMAND_SELECT_WHERE) {
@@ -223,6 +229,28 @@ dealloc:
     return result;
 }
 
+int sqlite_sql_stmt_exec_select_interiors(struct schema_record *schema,
+                                          struct sql_query *query,
+                                          struct btree_header *parent_page,
+                                          struct db *db, FILE *database_file) {
+    size_t child_count = parent_page->cells_count;
+    uint64_t child_page_numbers[100] = {0};
+
+    for (int i = 0; i < child_count; i++) {
+        child_page_numbers[i] =
+            btree_tinterior_cell_read(parent_page, i, database_file);
+    }
+
+    for (int i = 0; i < child_count; i++) {
+        struct btree_header header;
+        fseek(database_file, child_page_numbers[i] * db->page_size, SEEK_SET);
+        btree_header_read(&header, 0, database_file);
+        sqlite_sql_stmt_exec_select(schema, &header, query, database_file);
+    }
+
+    return 0;
+}
+
 int sqlite_sql_stmt_exec(struct schema_record *schema, struct sql_query *query,
                          struct db *db, FILE *database_file) {
 
@@ -233,7 +261,13 @@ int sqlite_sql_stmt_exec(struct schema_record *schema, struct sql_query *query,
     if (query->command & COMMAND_SELECT_COUNT) {
         sqlite_sql_stmt_exec_count(&page_header);
     } else if (query->command & COMMAND_SELECT) {
-        sqlite_sql_stmt_exec_select(schema, &page_header, query, database_file);
+        if (page_header.page_type == TABLE_INTERIOR_PAGE) {
+            sqlite_sql_stmt_exec_select_interiors(schema, query, &page_header,
+                                                  db, database_file);
+        } else {
+            sqlite_sql_stmt_exec_select(schema, &page_header, query,
+                                        database_file);
+        }
     }
 
 free_header:

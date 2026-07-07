@@ -70,6 +70,21 @@ int btree_header_read(struct btree_header *header, int first, FILE *stream) {
     return 0;
 }
 
+int btree_tinterior_cell_read(struct btree_header *header, int index,
+                              FILE *stream) {
+
+    int cell_offset = header->cell_offsets[index];
+    fseek(stream, header->page_start + cell_offset, SEEK_SET);
+    uint32_t left_child_page = 0;
+    int c = fread_be32(&left_child_page, stream);
+    if (c <= 0 || c >= sizeof left_child_page) {
+        fputs("failed to decode left child page number\n", stderr);
+        return -1;
+    }
+
+    return left_child_page;
+}
+
 /** reads an individual cell from the page whose header is defined
  ** by `header`. Use `btree_header_read` to obtain `header` object
  ** this header will contain a dynamic array of fields, call
@@ -80,40 +95,62 @@ int btree_header_read(struct btree_header *header, int first, FILE *stream) {
 int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
                           struct btree_header *header, int index,
                           FILE *stream) {
+    if (header->page_type != TABLE_LEAF_PAGE) {
+        printf("attempted to read leaf cell from wrong page type 0x%02x\n",
+               header->page_type);
+        return -1;
+    }
     int cell_offset = header->cell_offsets[index];
+    int c;
     fseek(stream, header->page_start + cell_offset, SEEK_SET);
 
-    if (fread_varint(&cell->payload_size, stream) <= 0) {
-        fputs("failed to parse payload size\n", stderr);
+    c = fread_varint(&cell->payload_size, stream);
+    if (c <= 0 || c >= sizeof cell->payload_size) {
+        fputs("failed to decode payload size\n", stderr);
         return -1;
     }
 
-    if (fread_varint(&cell->rowid, stream) <= 0) {
+    c = fread_varint(&cell->rowid, stream);
+    if (c <= 0 || c >= sizeof(cell->rowid)) {
         fputs("failed to parse rowid rom payload\n", stderr);
         return -1;
     }
 
+    if (!cell->payload_size) {
+        cell->record.fields_count = 0;
+        return 0;
+    }
+
     struct record *record = &cell->record; // aliasing for readability
     record->record_start = ftell(stream);
-    int c;
-    if ((c = fread_varint(&record->header_size, stream)) <= 0)
+    c = fread_varint(&record->header_size, stream);
+    if (c <= 0 || c >= sizeof(record->header_size)) {
+        fprintf(stderr, "decoding header_size varint failed; read %d bytes\n",
+                c);
         return -1;
+    }
 
     int remaining = record->header_size - c;
     uint64_t column_types[100];
     int i = 0;
     while (remaining) {
         int64_t serial = 0;
-        if ((c = fread_varint(&serial, stream)) <= 0)
+        c = fread_varint(&serial, stream);
+        if (c <= 0 || c >= sizeof(serial)) {
+            fprintf(stderr,
+                    "decoding serial type varint failed; read %d bytes\n", c);
             return -1;
+        }
         column_types[i++] = serial;
         remaining -= c;
     }
 
     record->fields_count = i;
 
-    if (record->fields_count == 0)
+    if (record->fields_count == 0) {
+        printf("going to overflow\n");
         goto overflow;
+    }
 
     struct field *fields = malloc(sizeof(struct field) * record->fields_count);
     if (!fields) {

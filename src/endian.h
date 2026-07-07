@@ -29,6 +29,8 @@ static inline int fread_varint(int64_t *out, FILE *stream) {
     for (int i = 0; i < 9; i++) {
         unsigned char b;
         if (fread(&b, 1, 1, stream) != 1) {
+            printf("ooops failed inside varint\n");
+            printf("i'm currently at %ld\n", ftell(stream));
             return -1;
         }
         unsigned char mask = i < 8 ? 0x7f : 0xff;
