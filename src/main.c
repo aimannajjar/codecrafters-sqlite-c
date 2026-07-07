@@ -30,6 +30,7 @@ int main(int argc, char *argv[]) {
         if (!(i%32)) {
             puts("");
         }
+        i++;
     }
     printf("---\n");
     fprintf(stderr, "\n");
