@@ -214,7 +214,7 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
                 .type = FIELD_TYPE_NUMBER,
             };
 
-            int64_t val = 4;
+            int64_t val = 0;
             // printf("found numerical serial type: %ld\n", column_types[i]);
             switch (column_types[i]) {
             case 0:
@@ -224,7 +224,7 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
                 val = fgetc(stream);
                 break;
             case 2:
-                uint16_t val16;
+                uint16_t val16 = 0;
                 if (!fread_be16(&val16, stream)) {
                     if (i > 0) // clean up previously allocated fields
                         record_fields_free(fields, i - 1);
