@@ -214,7 +214,7 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
                 .type = FIELD_TYPE_NUMBER,
             };
 
-            int64_t val = 0;
+            int64_t val = 4;
             // printf("found numerical serial type: %ld\n", column_types[i]);
             switch (column_types[i]) {
             case 0:
