@@ -82,7 +82,7 @@ static int sqlite_sql_stmt_exec_select_leaf(char **conditions,
     for (row = 0; row < row_count; row++) {
         int filtered = 1;
         struct btree_tleaf_cell cell;
-        if (btree_tleaf_cell_read(&cell, page, row, database_file, row % 200)) {
+        if (btree_tleaf_cell_read(&cell, page, row, database_file, row % 2000)) {
             fputs("failed to parse table page\n", stderr);
             break;
         }
