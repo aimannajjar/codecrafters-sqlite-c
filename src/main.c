@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "hashmap.h"
 
 int main(int argc, char *argv[]) {
     if (argc != 3) {

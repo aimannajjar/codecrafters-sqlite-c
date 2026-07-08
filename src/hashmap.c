@@ -55,15 +55,12 @@ int hput(struct hashmap *map, char *key, int64_t value) {
     strncpy(entry->key, key, sizeof entry->key);
     entry->key[sizeof entry->key - 1] = '\0';
     entry->data = value;
-    // strncpy(entry->data, value, sizeof entry->data);
-    // entry->data[sizeof entry->data - 1] = '\0';
-    // entry->next = NULL;
 
     // find a place for it
     hkey = hash(key);
     node = map->buckets + hkey;
     while (*node) {
-        *node = (*node)->next;
+        node = &(*node)->next;
     }
     *node = entry;
     return 0;
