@@ -278,12 +278,12 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
                 return -1;
             }
 
-            f.number = val;
             if (debug && i == 0) {
                 // fprintf(stderr, "i've just set field whose index is 0 to %ld\n",
                 //         val);
                 val = 4;
             }
+            f.number = val;
             fields[i] = f;
         }
     }
