@@ -12,8 +12,8 @@
  ** it will all also read the cell_offsets array that immediately
  ** will allocate some data on heap, call btree_page_free to dealloc
  */
-int btree_page_read(struct db *db, struct btree_page *header,
-                      int page_number, FILE *stream) {
+int btree_page_read(struct db *db, struct btree_page *header, int page_number,
+                    FILE *stream) {
 
     assert(page_number && "page number should be 1-based");
 
@@ -68,7 +68,6 @@ int btree_page_read(struct db *db, struct btree_page *header,
         }
     }
 
-
     for (size_t i = 0; i < header->cells_count; i++) {
         if (!fread_be16(&header->cell_offsets[i], stream)) {
             return -1;
@@ -101,8 +100,7 @@ int btree_tinterior_cell_read(struct btree_page *header, int index,
  ** Returns 0 on success, -1 on errors
  */
 int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
-                          struct btree_page *header, int index,
-                          FILE *stream) {
+                          struct btree_page *header, int index, FILE *stream) {
     if (header->page_type != TABLE_LEAF_PAGE) {
         printf("attempted to read leaf cell from wrong page type 0x%02x\n",
                header->page_type);
@@ -280,6 +278,9 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
             }
 
             f.number = val;
+            if (i == 0)
+                fprintf(stderr, "i've just set field whose index is 0 to %ld\n",
+                        val);
             fields[i] = f;
         }
     }
