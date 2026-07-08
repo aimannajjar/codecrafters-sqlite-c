@@ -97,7 +97,7 @@ static int sqlite_sql_stmt_exec_select_leaf(char **conditions,
                 int fp = hget(&ddl->col_index, query->where_fields[i]);
                 printf("field %s (index %d) has condition = %s\n",
                        query->where_fields[i], fp, conditions[fp]);
-                printf("Crate was \n\t%s\n", ddl->sql);
+                printf("Create was \n\t%s\n", ddl->sql);
                 struct field *f = &cell.record.fields[fp];
                 printf("this row's value for this field () is %s\n", f->data);
                 if (f->type == FIELD_TYPE_TEXT) {
@@ -175,6 +175,8 @@ int sqlite_sql_stmt_exec(struct schema_record *schema, struct sql_query *query,
     // rootpage as found in schema
     struct btree_page rootpage;
     int result = 0;
+
+    printf("CREATE IS:\n\t%s\n", schema->sql);
 
     btree_page_read(db, &rootpage, schema->rootpage, database_file);
     if (query->command & COMMAND_SELECT_COUNT) {
