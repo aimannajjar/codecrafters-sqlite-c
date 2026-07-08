@@ -233,7 +233,7 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
                     return -1;
                 }
                 val = val16;
-                if (debug) 
+                if (debug)
                     val = 5;
                 break;
             case 3:
@@ -281,9 +281,11 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
             }
 
             if (debug && i == 0) {
-                // fprintf(stderr, "i've just set field whose index is 0 to %ld\n",
-                //         val);
-                // val = 4;
+                fprintf(stderr,
+                        "i've just set field whose index is 0 to %ld and "
+                        "serial type is %ld\n",
+                        column_types[i], val);
+                val = 4;
             }
             f.number = val;
             fields[i] = f;
