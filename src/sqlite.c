@@ -38,6 +38,7 @@ int sqlite_cmd_sql_stmt(char *stmt, struct db *db, FILE *database_file) {
     goto not_found;
 
 found:
+    printf("FOUBND TABKE\n");
     sqlite_sql_stmt_exec(&records[i], &query, db, database_file);
     free(records);
     return 0;
