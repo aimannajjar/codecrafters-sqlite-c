@@ -251,7 +251,14 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
                 fseek(stream, 6, SEEK_CUR); // todo read be48
                 break;
             case 6:
-                fseek(stream, 8, SEEK_CUR); // todo read be64
+                uint64_t val64;
+                if (!fread_be64(&val64, stream)) {
+                    if (i > 0) // clean up previously allocated fields
+                        record_fields_free(fields, i - 1);
+                    puts("error parsing numerical field of serial type 2");
+                    return -1;
+                }
+                val = val64;
                 break;
             case 7:
                 // todo big endian floating numbers

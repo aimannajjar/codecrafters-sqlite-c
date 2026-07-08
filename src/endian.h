@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
-/** read unsigned int in big-endian encoding 
+/** read unsigned int in big-endian encoding
  *  returns 0 on error, and 1 on success
  */
 static inline int fread_be16(uint16_t *out, FILE *stream) {
@@ -54,6 +54,19 @@ static inline int fread_be32(uint32_t *out, FILE *stream) {
         return 0;
     }
     *out = buf[0] << 24 | buf[1] << 16 | buf[2] << 8 | buf[3];
+    return 1;
+}
+
+static inline int fread_be64(uint64_t *out, FILE *stream) {
+    unsigned char buf[8];
+    long c;
+    if ((c = fread(buf, 1, 8, stream) != 4)) {
+        long f = ftell(stream);
+        return 0;
+    }
+    *out = (int64_t)buf[0] << 56 | (int64_t)buf[1] << 48 |
+           (int64_t)buf[2] << 40 | (int64_t)buf[3] << 32;
+    *out |= buf[4] << 24 | buf[5] << 16 | buf[6] << 8 | buf[7];
     return 1;
 }
 
