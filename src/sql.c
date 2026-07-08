@@ -17,7 +17,8 @@ void strtolower(char *s) {
 
 static inline bool is_sql_keyword(char *tok) {
     return (KEYWORD_MATCH(tok, "primary") || KEYWORD_MATCH(tok, "key") ||
-            KEYWORD_MATCH(tok, "autoincrement"));
+            KEYWORD_MATCH(tok, "autoincrement") || KEYWORD_MATCH(tok, "not") ||
+            KEYWORD_MATCH(tok, "null"));
 }
 
 int sql_create_spec_parse(char *spec, struct sql_query *query) {
@@ -115,7 +116,7 @@ int sql_parse(char *sql, struct sql_query *query) {
                             strncpy(query->fields[query->fields_count],
                                     field_token, sizeof query->fields[0]);
                             query->fields[query->fields_count]
-                                        [sizeof query->fields[0] - 1] = '\0';
+                                         [sizeof query->fields[0] - 1] = '\0';
                             query->fields_count++;
 
                             if (c <= 0 ||
