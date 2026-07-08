@@ -80,21 +80,17 @@ static int sqlite_sql_stmt_exec_select_leaf(char **conditions,
     int row = 0;
 
     for (row = 0; row < row_count; row++) {
-        bool filtered = 0;
+        int filtered = 0;
+        int filtering_occurred = 0;
         struct btree_tleaf_cell cell;
         if (btree_tleaf_cell_read(&cell, page, row, database_file)) {
             fputs("failed to parse table page\n", stderr);
             break;
         }
 
-        if (!cell.record.fields_count) {
-            // skipping empty cell
-            btree_tleaf_cell_free(&cell);
-            continue;
-        }
-
         if (query->command & COMMAND_SELECT_WHERE) {
             for (int i = 0; i < query->where_fields_count; i++) {
+                filtering_occurred = 1;
                 int fp = hget(&ddl->col_index, query->where_fields[i]);
                 // printf("field %s (index %d) has condition = %s\n",
                 //        query->where_fields[i], fp, conditions[fp]);
@@ -124,9 +120,9 @@ static int sqlite_sql_stmt_exec_select_leaf(char **conditions,
                 btree_tleaf_cell_free(&cell);
                 continue;
             }
-        } else {
-            assert(false && "should not be reached");
         }
+
+        assert(filtering_occurred);
 
         for (int i = 0; i < query->fields_count; i++) {
             int fp = hget(&ddl->col_index, query->fields[i]);
