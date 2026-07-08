@@ -47,7 +47,7 @@ int sqlite_cmd_sql_stmt(char *stmt, struct db *db, FILE *database_file) {
     }
 
     if (table_ddl >= 0) {
-        if (index_ddl > 0) {
+        if (query.where_fields_count && index_ddl > 0) {
             sqlite_sql_search_index(db, &records[index_ddl],
                                     &records[table_ddl], &query, database_file);
         } else {
@@ -118,7 +118,7 @@ int sqlite_sql_search_index(struct db *db, struct schema_record *index_ddl,
         return -1;
 
     if (page.page_type == INDEX_INTERIOR_PAGE) {
-        sqlite_sql_search_index_tree(db, &page, "tonga", sizeof results,
+        sqlite_sql_search_index_tree(db, &page, query->where_values[0], sizeof results,
                                      results, &found_pos, database_file);
 
         // search right most child of page
@@ -126,7 +126,7 @@ int sqlite_sql_search_index(struct db *db, struct schema_record *index_ddl,
         if (btree_page_read(db, &right_child, page.right_ptr, database_file))
             return -1;
 
-        sqlite_sql_search_index_tree(db, &right_child, "tonga", sizeof results,
+        sqlite_sql_search_index_tree(db, &right_child, query->where_values[0], sizeof results,
                                      results, &found_pos, database_file);
 
         btree_page_free(&right_child);
