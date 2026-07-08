@@ -139,7 +139,7 @@ static int sqlite_sql_stmt_exec_select_leaf(char **conditions,
             if (f->type == FIELD_TYPE_TEXT) {
                 printf("%s", f->data);
             } else if (f->type == FIELD_TYPE_NUMBER) {
-                printf("%b", *f->data);
+                printf("%s", f->data);
             }
         }
         puts("");
