@@ -102,6 +102,7 @@ static int sqlite_sql_stmt_exec_select_leaf(char **conditions,
                 if (f->type == FIELD_TYPE_TEXT) {
                     fprintf(stderr, "does %s = %s\n", f->data, conditions[fp]);
                     if (conditions[fp] && strcmp(f->data, conditions[fp])) {
+                        printf("FILTERED OUT ROW %d\n", row);
                         filtered = 1;
                     }
 
