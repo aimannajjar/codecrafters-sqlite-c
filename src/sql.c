@@ -25,14 +25,17 @@ int sql_create_spec_parse(char *spec, struct sql_query *query) {
     // for now we're only interested in field names and not types
     query->fields_list[0] = 0;
     query->fields_count = 0;
-    char *tok = strtok(spec, " ,()");
+    char *tok = strtok(spec, " \t\n,()");
     if (!tok)
         goto invalid;
 
     int i = 0;
     int offset = 0;
     do {
+        char field_name[FIELD_NAME_MAX_LEN];
+        int foffset = 0;
         strtolower(tok);
+        // printf("tok is '%s'\n", tok);
         if (is_sql_keyword(tok))
             continue;
 
@@ -40,10 +43,26 @@ int sql_create_spec_parse(char *spec, struct sql_query *query) {
             // this is a field type
             continue;
 
+        if (tok[0] == '"') {
+            // skip leading double-quote
+            strncpy(field_name, tok + 1, sizeof field_name);
+            foffset = strlen(tok) - 1;
+            while ((tok = strtok(NULL, " ")) && tok[strlen(tok) - 1] != '"') {
+                // TODO error handling
+                foffset += snprintf(field_name + foffset,
+                                    sizeof(field_name) - foffset, " %s", tok);
+            }
+            // strip ending double-quote
+            tok[strlen(tok) - 1] = 0;
+        }
+
+        snprintf(field_name + foffset, sizeof(field_name) - foffset,
+                 foffset ? " %s" : "%s", tok);
+
         const char *fmt = (i - 1 == 0) ? "%s" : ",%s";
 
         int c = snprintf(query->fields_list + offset,
-                         sizeof query->fields_list - offset, fmt, tok);
+                         sizeof query->fields_list - offset, fmt, field_name);
         if (c < 0 || c >= sizeof query->fields_list - offset) {
             fputs("error building field list or field list too big", stderr);
             goto invalid;
@@ -51,7 +70,7 @@ int sql_create_spec_parse(char *spec, struct sql_query *query) {
         offset += c;
         query->fields_count++;
 
-    } while ((tok = strtok(NULL, " ,()")));
+    } while ((tok = strtok(NULL, " \t\n,()")));
 
     return 0;
 invalid:
@@ -64,7 +83,7 @@ int sql_parse(char *sql, struct sql_query *query) {
 
     char *tok;
     int i = 0;
-    tok = strtok(sql, " ");
+    tok = strtok(sql, " \n");
     query->table[0] = '\0';
     query->fields_list[0] = '\0';
     query->command = COMMAND_INVALID;
@@ -79,7 +98,7 @@ int sql_parse(char *sql, struct sql_query *query) {
             if (strcmp(tok, "select") == 0) {
                 query->command = COMMAND_SELECT;
             } else if (strcmp(tok, "create") == 0) {
-                query->command = COMMAND_CREATE;
+                query->command = COMMAND_CREATE_TABLE;
             }
             break;
         case 1:
@@ -133,22 +152,27 @@ int sql_parse(char *sql, struct sql_query *query) {
                     } while ((tok = strtok(NULL, " ")));
                     query->fields_list[sizeof query->fields_list - 1] = 0;
                 }
-            } else if (query->command & COMMAND_CREATE) {
-                if (strcmp(tok, "table") != 0) {
+            } else if (query->command & COMMAND_CREATE_TABLE) {
+                if (!strcmp(tok, "index")) {
+                    query->command = COMMAND_CREATE_INDEX;
+                } else if (strcmp(tok, "table")) {
                     // we only support create table so far
-                    fputs("only create table supported currently", stderr);
+                    fprintf(stderr,
+                            "only create table supported currently, got: %s\n",
+                            tok);
                     goto invalid;
                 }
             }
             break;
         case 2:
-            if (query->command & COMMAND_CREATE) {
+            if (query->command &
+                (COMMAND_CREATE_TABLE | COMMAND_CREATE_INDEX)) {
                 strncpy(query->table, tok, TABLE_NAME_MAX_LEN);
                 query->table[sizeof query->table - 1] = '\0';
             }
             break;
         case 3:
-            if (query->command & COMMAND_CREATE) {
+            if (query->command & COMMAND_CREATE_TABLE) {
                 // consume all remaining tokens to put hem in field list
                 char *create_spec_tokens = strtok(NULL, "");
                 char create_spec[FIELDS_LIST_MAX_LEN];
@@ -224,7 +248,7 @@ int sql_parse(char *sql, struct sql_query *query) {
             }
             break;
         }
-    } while ((tok = strtok(NULL, " ")));
+    } while ((tok = strtok(NULL, " \n")));
 
     if (query->table[0] == '\0' || query->command & COMMAND_INVALID) {
         fprintf(stderr,

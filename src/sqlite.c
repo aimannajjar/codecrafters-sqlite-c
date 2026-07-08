@@ -11,7 +11,6 @@
 
 #define MAX_SQL_STMT_LEN 4096
 
-
 static int global_autoincrement = 1;
 
 int sqlite_cmd_sql_stmt(char *stmt, struct db *db, FILE *database_file) {
@@ -136,8 +135,6 @@ static int sqlite_sql_stmt_exec_select_leaf(char **conditions,
             if (f->type == FIELD_TYPE_TEXT) {
                 printf("%s", f->data);
             } else if (f->type == FIELD_TYPE_NUMBER) {
-                // fprintf(stderr, "field %s (index %d)'s value is wrong: %ld\n",
-                //         query->fields[i], fp, f->number);
                 printf("%d", id);
             }
         }
@@ -156,12 +153,27 @@ int sqlite_sql_stmt_exec_select_interiors(char **conditions,
     size_t child_count = parent_page->cells_count;
 
     for (int i = 0; i < child_count; i++) {
-        struct btree_page header;
+        struct btree_page child_page;
         uint64_t pn = btree_tinterior_cell_read(parent_page, i, database_file);
-        btree_page_read(db, &header, pn, database_file);
-        sqlite_sql_stmt_exec_select_leaf(conditions, ddl, &header, query,
-                                         database_file);
-        btree_page_free(&header);
+
+        // TOOD: this logic is redundant with portions of sqlite_sql_stmt_exec
+        btree_page_read(db, &child_page, pn, database_file);
+        if (child_page.page_type == TABLE_INTERIOR_PAGE) {
+            sqlite_sql_stmt_exec_select_interiors(
+                conditions, ddl, query, &child_page, db, database_file);
+        } else if (child_page.page_type == TABLE_LEAF_PAGE) {
+            if (sqlite_sql_stmt_exec_select_leaf(conditions, ddl, &child_page,
+                                             query, database_file)) {
+                btree_page_free(&child_page);
+                return -1;
+            }
+        } else {
+            printf("unexpected page type: 0x%02x\n", child_page.page_type);
+            btree_page_free(&child_page);
+            return -1;
+        }
+
+        btree_page_free(&child_page);
     }
 
     return 0;
