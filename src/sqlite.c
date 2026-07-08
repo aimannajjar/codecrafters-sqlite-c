@@ -95,14 +95,15 @@ static int sqlite_sql_stmt_exec_select_leaf(char **conditions,
                 // printf("Create was \n\t%s\n", ddl->sql);
                 struct field *f = &cell.record.fields[fp];
                 if (f->type == FIELD_TYPE_TEXT) {
-                    // fprintf(stderr, "does %s = %s\n", f->data, conditions[fp]);
+                    // fprintf(stderr, "does %s = %s\n", f->data,
+                    // conditions[fp]);
                     if (conditions[fp] && strcmp(f->data, conditions[fp])) {
                         // printf("FILTERED OUT ROW %d\n", row);
                         filtered = 1;
                     } else {
                         filtered = 0;
-                        fprintf(stderr, "found match!! row:%d, %s = %s\n", row, f->data,
-                                conditions[fp]);
+                        fprintf(stderr, "found match!! row:%d, %s = %s\n", row,
+                                f->data, conditions[fp]);
                     }
 
                 } else if (f->type == FIELD_TYPE_NUMBER) {
@@ -139,7 +140,9 @@ static int sqlite_sql_stmt_exec_select_leaf(char **conditions,
             if (f->type == FIELD_TYPE_TEXT) {
                 printf("%s", f->data);
             } else if (f->type == FIELD_TYPE_NUMBER) {
-                printf("%s", f->data);
+                fprintf(stderr, "field %s (index %d)'s value is wrong: %ld\n",
+                        query->fields[i], fp, f->number);
+                printf("%ld", f->number);
             }
         }
         puts("");
