@@ -11,6 +11,9 @@
 
 #define MAX_SQL_STMT_LEN 4096
 
+
+static int global_autoincrement = 0;
+
 int sqlite_cmd_sql_stmt(char *stmt, struct db *db, FILE *database_file) {
     // SQL command
     char sql_stmt[MAX_SQL_STMT_LEN] = {0};
@@ -81,6 +84,7 @@ static int sqlite_sql_stmt_exec_select_leaf(char **conditions,
 
     for (row = 0; row < row_count; row++) {
         int filtered = 1;
+        int id = global_autoincrement++;
         struct btree_tleaf_cell cell;
         if (btree_tleaf_cell_read(&cell, page, row, database_file)) {
             fputs("failed to parse table page\n", stderr);
@@ -142,7 +146,7 @@ static int sqlite_sql_stmt_exec_select_leaf(char **conditions,
             } else if (f->type == FIELD_TYPE_NUMBER) {
                 // fprintf(stderr, "field %s (index %d)'s value is wrong: %ld\n",
                 //         query->fields[i], fp, f->number);
-                printf("%d", row);
+                printf("%d", id);
             }
         }
         puts("");
