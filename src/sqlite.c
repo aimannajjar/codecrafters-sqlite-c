@@ -3,6 +3,7 @@
 #include "hashmap.h"
 #include "page.h"
 #include "sql.h"
+#include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -123,6 +124,8 @@ static int sqlite_sql_stmt_exec_select_leaf(char **conditions,
                 btree_tleaf_cell_free(&cell);
                 continue;
             }
+        } else {
+            assert(false && "should not be reached");
         }
 
         for (int i = 0; i < query->fields_count; i++) {
