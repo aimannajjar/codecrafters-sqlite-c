@@ -217,7 +217,7 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
             };
 
             int64_t val = 0;
-            printf("found numerical serial type: %ld\n", column_types[i]);
+            // printf("found numerical serial type: %ld\n", column_types[i]);
             switch (column_types[i]) {
             case 0:
                 val = 0; // for now using 0 as SQL NULL
