@@ -29,12 +29,24 @@ struct record {
     struct field *fields;
 };
 
-struct btree_tleaf_cell {
+// table leaf and index leaf cells are
+// almost identical (with except of rowid)
+// so we reuse same structure
+struct btree_leaf_cell {
     int64_t payload_size;
     int64_t rowid;
-    unsigned char *payload;
     uint32_t overflow_page_number;
-    struct record record;
+    struct record record; // cell payload
+};
+
+// index interior cells actually have
+// data, unlike table interior cells
+// which only have pointers
+struct btree_index_interior_cell {
+    uint32_t left_child_pn;
+    int64_t payload_size;
+    uint32_t overflow_page_number;
+    struct record record; // this is the payload
 };
 
 enum field_type {
@@ -56,14 +68,19 @@ struct field {
 struct db;
 
 void record_fields_free(struct field *fields, size_t len);
-int btree_page_read(struct db *db, struct btree_page *header, int first, FILE *stream);
+int btree_page_read(struct db *db, struct btree_page *header, int first,
+                    FILE *stream);
 int btree_page_free(struct btree_page *header);
-int btree_tleaf_cell_free(struct btree_tleaf_cell *cell);
-int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
-                          struct btree_page *header, int index, FILE *stream);
-int btree_cell_read(struct btree_tleaf_cell *cell, struct btree_page *header,
+int btree_leaf_cell_free(struct btree_leaf_cell *cell);
+int btree_iinterior_cell_free(struct btree_index_interior_cell *cell);
+int btree_record_read(int rowid, struct record *record, FILE *stream);
+int btree_leaf_cell_read(struct btree_leaf_cell *cell,
+                         struct btree_page *header, int index, FILE *stream);
+int btree_cell_read(struct btree_leaf_cell *cell, struct btree_page *header,
                     int index, FILE *stream);
 int btree_tinterior_cell_read(struct btree_page *header, int index,
                               FILE *stream);
+int btree_iinterior_cell_read(struct btree_index_interior_cell *cell,
+                              struct btree_page *header, int index,
+                              FILE *stream);
 #endif
-

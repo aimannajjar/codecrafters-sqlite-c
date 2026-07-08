@@ -16,6 +16,8 @@ int sqlite_cmd_sql_stmt(char *stmt, struct db *db, FILE *database_file) {
     char sql_stmt[MAX_SQL_STMT_LEN] = {0};
     strncpy(sql_stmt, stmt, MAX_SQL_STMT_LEN);
     sql_stmt[MAX_SQL_STMT_LEN - 1] = '\0';
+    int table_ddl = -1;
+    int index_ddl = -1;
 
     struct sql_query query;
     if (sql_parse(stmt, &query)) {
@@ -32,21 +34,70 @@ int sqlite_cmd_sql_stmt(char *stmt, struct db *db, FILE *database_file) {
     // find the table we're interested in
     size_t i = 0;
     for (i = 0; i < rlen; i++) {
-        if (strcmp(records[i].tbl_name, query.table) == 0) {
-            goto found;
+        if (!strcmp(records[i].type, "table") &&
+            !strcmp(records[i].tbl_name, query.table)) {
+            table_ddl = i;
+        } else if (!strcmp(records[i].type, "index") &&
+                   !strcmp(records[i].tbl_name, query.table)) {
+            index_ddl = i;
         }
+
+        if (table_ddl >= 0 && index_ddl >= 0)
+            break;
     }
-    goto not_found;
 
-found:
-    sqlite_sql_stmt_exec(&records[i], &query, db, database_file);
-    free(records);
-    return 0;
+    if (table_ddl >= 0) {
+        if (index_ddl > 0) {
+            sqlite_sql_search_index(db, &records[index_ddl],
+                                    &records[table_ddl], &query, database_file);
+        }
+        sqlite_sql_stmt_exec(&records[table_ddl], &query, db, database_file);
+        free(records);
+        return 0;
+    }
 
-not_found:
     printf("table '%s' does not exist\n", query.table);
     free(records);
     return -1;
+}
+
+static int sqlite_sql_search_index(struct db *db,
+                                   struct schema_record *index_ddl,
+                                   struct schema_record *table_ddl,
+                                   struct sql_query *query,
+                                   FILE *database_file) {
+    struct btree_page page;
+    if (btree_page_read(db, &page, index_ddl->rootpage, database_file))
+        return -1;
+
+    printf("index root page type is 0x%02x\n", page.page_type);
+    printf("found %d cells in index root page\n", page.cells_count);
+    printf("first cell ptr is %d\n", page.cell_offsets[0]);
+    if (page.page_type == INDEX_INTERIOR_PAGE) {
+        struct btree_index_interior_cell iicell;
+        btree_iinterior_cell_read(&iicell, &page, 0, database_file);
+        for (size_t ci = 0; ci < page.cells_count; ci++) {
+            for (size_t i = 0; i < iicell.record.fields_count; i++) {
+                struct field *f = &iicell.record.fields[i];
+                if (f->type == FIELD_TYPE_TEXT) {
+                    printf("row %ld - %ld (t): %s\n", ci, i, f->data);
+                } else if (f->type == FIELD_TYPE_NUMBER) {
+                    printf("row %ld - %ld (n): %ld\n", ci, i, f->number);
+                }
+            }
+        }
+        printf("left child ptr: %d\n", iicell.left_child_pn);
+        btree_iinterior_cell_free(&iicell);
+    }
+
+    // for (int i = 0; i < query->where_fields_count; i++) {
+    //     char *key = query->where_fields[i];
+    //     char *value = query->where_values[i];
+    //     printf("searching index for %s = %s\n", key, value);
+    // }
+
+    btree_page_free(&page);
+    return 0;
 }
 
 static int sqlite_sql_stmt_exec_count(struct db *db,
@@ -81,8 +132,8 @@ static int sqlite_sql_stmt_exec_select_leaf(char **conditions,
 
     for (row = 0; row < row_count; row++) {
         int filtered = 1;
-        struct btree_tleaf_cell cell;
-        if (btree_tleaf_cell_read(&cell, page, row, database_file)) {
+        struct btree_leaf_cell cell;
+        if (btree_leaf_cell_read(&cell, page, row, database_file)) {
             fputs("failed to parse table page\n", stderr);
             break;
         }
@@ -109,7 +160,7 @@ static int sqlite_sql_stmt_exec_select_leaf(char **conditions,
                 }
             }
             if (filtered) {
-                btree_tleaf_cell_free(&cell);
+                btree_leaf_cell_free(&cell);
                 continue;
             }
         }
@@ -120,11 +171,11 @@ static int sqlite_sql_stmt_exec_select_leaf(char **conditions,
                 putchar('|');
 
             if (fp < 0 || fp >= cell.record.fields_count) {
-                fprintf(
-                    stderr,
-                    "field parsing failed: %s field index %d out of bounds\n",
-                    query->fields[i], fp);
-                btree_tleaf_cell_free(&cell);
+                fprintf(stderr,
+                        "field parsing failed: %s field index %d out of "
+                        "bounds\n",
+                        query->fields[i], fp);
+                btree_leaf_cell_free(&cell);
                 return -1;
             }
 
@@ -137,7 +188,7 @@ static int sqlite_sql_stmt_exec_select_leaf(char **conditions,
         }
         puts("");
 
-        btree_tleaf_cell_free(&cell);
+        btree_leaf_cell_free(&cell);
     }
     return result;
 }
@@ -153,14 +204,16 @@ int sqlite_sql_stmt_exec_select_interiors(char **conditions,
         struct btree_page child_page;
         uint64_t pn = btree_tinterior_cell_read(parent_page, i, database_file);
 
-        // TOOD: this logic is redundant with portions of sqlite_sql_stmt_exec
+        // TOOD: this logic is redundant with portions of
+        // sqlite_sql_stmt_exec
         btree_page_read(db, &child_page, pn, database_file);
         if (child_page.page_type == TABLE_INTERIOR_PAGE) {
             sqlite_sql_stmt_exec_select_interiors(
                 conditions, ddl, query, &child_page, db, database_file);
-        } else if (child_page.page_type == TABLE_LEAF_PAGE) {
+        } else if (child_page.page_type == TABLE_LEAF_PAGE ||
+                   child_page.page_type == INDEX_LEAF_PAGE) {
             if (sqlite_sql_stmt_exec_select_leaf(conditions, ddl, &child_page,
-                                             query, database_file)) {
+                                                 query, database_file)) {
                 btree_page_free(&child_page);
                 return -1;
             }

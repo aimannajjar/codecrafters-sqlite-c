@@ -52,7 +52,8 @@ int btree_page_read(struct db *db, struct btree_page *header, int page_number,
     }
     // |   |   |   |   |
     header->right_ptr = 0;
-    if (header->page_type == TABLE_INTERIOR_PAGE) {
+    if (header->page_type == TABLE_INTERIOR_PAGE ||
+        header->page_type == INDEX_INTERIOR_PAGE) {
         // only interior pages have right_ptr
         if (!fread_be32(&header->right_ptr, stream)) {
             return -1;
@@ -92,6 +93,62 @@ int btree_tinterior_cell_read(struct btree_page *header, int index,
     return left_child_page;
 }
 
+/** reads an individual index interior cell from the page whose header is
+ ** defined by `header`. Use `btree_header_read` to obtain `header` object
+ ** this header will contain a dynamic array of fields, call
+ ** `btree_tleaf_cell_free` to fully free the contents of the cell
+ ** when done with it.
+ ** Returns 0 on success, -1 on errors
+ */
+int btree_iinterior_cell_read(struct btree_index_interior_cell *cell,
+                              struct btree_page *header, int index,
+                              FILE *stream) {
+    if (header->page_type != INDEX_INTERIOR_PAGE) {
+        fprintf(stderr,
+                "attempted to read interior cell from wrong page type 0x%02x\n",
+                header->page_type);
+        return -1;
+    }
+
+    int cell_offset = header->cell_offsets[index];
+    printf("interior cell start is %ld\n", header->page_start + cell_offset);
+    fseek(stream, header->page_start + cell_offset, SEEK_SET);
+
+    // left child page
+    uint32_t left_child_page = 0;
+    int c = fread_be32(&left_child_page, stream);
+    if (c <= 0 || c >= sizeof left_child_page) {
+        fputs("failed to decode left child page number\n", stderr);
+        return -1;
+    }
+    cell->left_child_pn = left_child_page;
+
+    // payload size
+    c = fread_varint(&cell->payload_size, stream);
+    if (c <= 0 || c >= sizeof cell->payload_size) {
+        fputs("failed to decode payload size\n", stderr);
+        return -1;
+    }
+
+    if (!cell->payload_size) {
+        cell->record.fields_count = 0;
+        return 0;
+    }
+
+    // payload
+    int r = btree_record_read(0, &cell->record, stream);
+    if (r == -2) {
+        if (fread_be32(&cell->overflow_page_number, stream) == 0) {
+            fputs("could not read overflow page number\n", stderr);
+            return -1;
+        }
+    } else if (r < 0) {
+        return -1;
+    }
+
+    return 0;
+}
+
 /** reads an individual cell from the page whose header is defined
  ** by `header`. Use `btree_header_read` to obtain `header` object
  ** this header will contain a dynamic array of fields, call
@@ -99,9 +156,10 @@ int btree_tinterior_cell_read(struct btree_page *header, int index,
  ** when done with it.
  ** Returns 0 on success, -1 on errors
  */
-int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
-                          struct btree_page *header, int index, FILE *stream) {
-    if (header->page_type != TABLE_LEAF_PAGE) {
+int btree_leaf_cell_read(struct btree_leaf_cell *cell,
+                         struct btree_page *header, int index, FILE *stream) {
+    if (header->page_type != TABLE_LEAF_PAGE &&
+        header->page_type != INDEX_LEAF_PAGE) {
         printf("attempted to read leaf cell from wrong page type 0x%02x\n",
                header->page_type);
         return -1;
@@ -116,10 +174,13 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
         return -1;
     }
 
-    c = fread_varint(&cell->rowid, stream);
-    if (c <= 0 || c >= sizeof(cell->rowid)) {
-        fputs("failed to parse rowid rom payload\n", stderr);
-        return -1;
+    cell->rowid = 0;
+    if (header->page_type == TABLE_LEAF_PAGE) {
+        c = fread_varint(&cell->rowid, stream);
+        if (c <= 0 || c >= sizeof(cell->rowid)) {
+            fputs("failed to parse rowid rom payload\n", stderr);
+            return -1;
+        }
     }
 
     if (!cell->payload_size) {
@@ -127,7 +188,26 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
         return 0;
     }
 
-    struct record *record = &cell->record; // aliasing for readability
+    int r = btree_record_read(cell->rowid, &cell->record, stream);
+    if (r == -2) {
+        if (fread_be32(&cell->overflow_page_number, stream) == 0) {
+            fputs("could not read overflow page number\n", stderr);
+            return -1;
+        }
+    } else if (r < 0) {
+        return -1;
+    }
+
+    return 0;
+}
+
+/** Read and decode a record from CURRENT POSITION in stream
+ ** return -2 if there is page overflow
+ **        -1 on errors
+ **         0 on success
+ */
+int btree_record_read(int rowid, struct record *record, FILE *stream) {
+    int c;
     record->record_start = ftell(stream);
     c = fread_varint(&record->header_size, stream);
     if (c <= 0 || c >= sizeof(record->header_size)) {
@@ -154,8 +234,7 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
     record->fields_count = i;
 
     if (record->fields_count == 0) {
-        printf("going to overflow\n");
-        goto overflow;
+        return -2;
     }
 
     struct field *fields = malloc(sizeof(struct field) * record->fields_count);
@@ -215,10 +294,10 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
             };
 
             int64_t val = 0;
-            // printf("found numerical serial type: %ld\n", column_types[i]);
             switch (column_types[i]) {
             case 0:
-                val = cell->rowid; // for now using 0 as SQL NULL
+                val = rowid; // using rowid for all NULLs, in reality this
+                             // should be limited to primary keys
                 break;
             case 1:
                 val = fgetc(stream);
@@ -283,12 +362,6 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
     }
     record->fields = fields;
 
-overflow:
-    if (fread_be32(&cell->overflow_page_number, stream) == 0) {
-        // fputs("could not read overflow page number\n", stderr);
-        // return -1;
-    }
-
     return 0;
 }
 
@@ -307,7 +380,18 @@ int btree_page_free(struct btree_page *header) {
  ** this will not deallocate the passed `struct btree_leaf_cell`,
  ** only any dynamic objects inside it
  */
-int btree_tleaf_cell_free(struct btree_tleaf_cell *cell) {
+int btree_leaf_cell_free(struct btree_leaf_cell *cell) {
+    record_fields_free(cell->record.fields, cell->record.fields_count);
+    free(cell->record.fields);
+    cell->record.fields = NULL;
+    return 0;
+}
+
+/** cleans up dynamic allocations in btree_index_interior_cell objects
+ ** this will not deallocate the passed struct,
+ ** only any dynamic objects inside it
+ */
+int btree_iinterior_cell_free(struct btree_index_interior_cell *cell) {
     record_fields_free(cell->record.fields, cell->record.fields_count);
     free(cell->record.fields);
     cell->record.fields = NULL;

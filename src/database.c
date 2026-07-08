@@ -110,8 +110,8 @@ int db_read_schema_table(struct db *db, struct schema_record **records,
     size_t cells_len = schema_page_header.cells_count;
     int row = 0;
     for (row = 0; row < cells_len; row++) {
-        struct btree_tleaf_cell cell;
-        if (btree_tleaf_cell_read(&cell, &schema_page_header, row,
+        struct btree_leaf_cell cell;
+        if (btree_leaf_cell_read(&cell, &schema_page_header, row,
                                   database_file)) {
             puts("failed to parse schema page");
             break;
@@ -176,7 +176,7 @@ int db_read_schema_table(struct db *db, struct schema_record **records,
                 break;
             }
         }
-        btree_tleaf_cell_free(&cell);
+        btree_leaf_cell_free(&cell);
 
         // populate field_name -> index map
         char *schema_sql = strdup(srecs[row].sql);
