@@ -112,7 +112,7 @@ int db_read_schema_table(struct db *db, struct schema_record **records,
     for (row = 0; row < cells_len; row++) {
         struct btree_tleaf_cell cell;
         if (btree_tleaf_cell_read(&cell, &schema_page_header, row,
-                                  database_file)) {
+                                  database_file, 0)) {
             puts("failed to parse schema page");
             break;
         }
