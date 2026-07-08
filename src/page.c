@@ -218,7 +218,7 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
             // printf("found numerical serial type: %ld\n", column_types[i]);
             switch (column_types[i]) {
             case 0:
-                val = 0; // for now using 0 as SQL NULL
+                val = cell->rowid; // for now using 0 as SQL NULL
                 break;
             case 1:
                 val = fgetc(stream);

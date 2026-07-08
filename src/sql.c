@@ -36,6 +36,8 @@ int sql_create_spec_parse(char *spec, struct sql_query *query) {
         int foffset = 0;
         strtolower(tok);
         // printf("tok is '%s'\n", tok);
+        if (KEYWORD_MATCH(tok, "autoincrement")) {}
+
         if (is_sql_keyword(tok))
             continue;
 
@@ -81,6 +83,7 @@ invalid:
  */
 int sql_parse(char *sql, struct sql_query *query) {
 
+    // printf("parsing %s\n", sql);
     char *tok;
     int i = 0;
     tok = strtok(sql, " \n");
