@@ -124,8 +124,8 @@ static int sqlite_sql_stmt_exec_select_leaf(char **conditions,
 
             if (fp < 0 || fp >= cell.record.fields_count) {
                 fprintf(stderr,
-                        "field parsing failed: field index %d out of bounds\n",
-                        fp);
+                        "field parsing failed: %s field index %d out of bounds\n",
+                        query->fields[i], fp);
                 btree_tleaf_cell_free(&cell);
                 return -1;
             }
