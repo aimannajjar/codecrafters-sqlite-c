@@ -50,8 +50,10 @@ int sqlite_cmd_sql_stmt(char *stmt, struct db *db, FILE *database_file) {
         if (index_ddl > 0) {
             sqlite_sql_search_index(db, &records[index_ddl],
                                     &records[table_ddl], &query, database_file);
+        } else {
+            sqlite_sql_stmt_exec(&records[table_ddl], &query, db,
+                                 database_file);
         }
-        sqlite_sql_stmt_exec(&records[table_ddl], &query, db, database_file);
         free(records);
         return 0;
     }
@@ -61,40 +63,79 @@ int sqlite_cmd_sql_stmt(char *stmt, struct db *db, FILE *database_file) {
     return -1;
 }
 
-static int sqlite_sql_search_index(struct db *db,
-                                   struct schema_record *index_ddl,
-                                   struct schema_record *table_ddl,
-                                   struct sql_query *query,
-                                   FILE *database_file) {
-    struct btree_page page;
-    if (btree_page_read(db, &page, index_ddl->rootpage, database_file))
-        return -1;
+// TODO: use proper tree traversal
+int sqlite_sql_search_index_tree(struct db *db, struct btree_page *page,
+                                 char *condition, size_t n, int64_t results[n],
+                                 size_t *curr, FILE *database_file) {
 
-    printf("index root page type is 0x%02x\n", page.page_type);
-    printf("found %d cells in index root page\n", page.cells_count);
-    printf("first cell ptr is %d\n", page.cell_offsets[0]);
-    if (page.page_type == INDEX_INTERIOR_PAGE) {
-        struct btree_index_interior_cell iicell;
-        btree_iinterior_cell_read(&iicell, &page, 0, database_file);
-        for (size_t ci = 0; ci < page.cells_count; ci++) {
-            for (size_t i = 0; i < iicell.record.fields_count; i++) {
-                struct field *f = &iicell.record.fields[i];
-                if (f->type == FIELD_TYPE_TEXT) {
-                    printf("row %ld - %ld (t): %s\n", ci, i, f->data);
-                } else if (f->type == FIELD_TYPE_NUMBER) {
-                    printf("row %ld - %ld (n): %ld\n", ci, i, f->number);
+    if (*curr >= n) {
+        printf("reached maximum results: %lu\n", *curr);
+        return -1;
+    }
+
+    for (size_t ci = 0; ci < page->cells_count; ci++) {
+        struct btree_index_cell cell;
+        btree_index_cell_read(&cell, page, ci, database_file);
+        int match = 0;
+        for (size_t i = 0; i < cell.record.fields_count; i++) {
+            struct field *f = &cell.record.fields[i];
+            if (f->type == FIELD_TYPE_TEXT) {
+                if (!strcmp(condition, f->data)) {
+                    match = 1;
+                }
+            } else if (f->type == FIELD_TYPE_NUMBER) {
+                if (match) {
+                    results[(*curr)++] = f->number;
                 }
             }
         }
-        printf("left child ptr: %d\n", iicell.left_child_pn);
-        btree_iinterior_cell_free(&iicell);
+
+        // if this is interior page, search in left ptr
+        if (page->page_type == INDEX_INTERIOR_PAGE) {
+            struct btree_page left_child;
+            btree_page_read(db, &left_child, cell.left_child_pn, database_file);
+            if (left_child.page_type == INDEX_INTERIOR_PAGE) {
+                sqlite_sql_search_index_tree(db, &left_child, condition, n,
+                                             results, curr, database_file);
+            } else {
+                sqlite_sql_search_index_tree(db, &left_child, condition, n,
+                                             results, curr, database_file);
+            }
+            btree_page_free(&left_child);
+        }
+        btree_index_cell_free(&cell);
+    }
+    return 0;
+}
+
+int sqlite_sql_search_index(struct db *db, struct schema_record *index_ddl,
+                            struct schema_record *table_ddl,
+                            struct sql_query *query, FILE *database_file) {
+    struct btree_page page;
+    int64_t results[SEARCH_MAX_RESULTS];
+    size_t found_pos = 0;
+    if (btree_page_read(db, &page, index_ddl->rootpage, database_file))
+        return -1;
+
+    if (page.page_type == INDEX_INTERIOR_PAGE) {
+        sqlite_sql_search_index_tree(db, &page, "tonga", sizeof results,
+                                     results, &found_pos, database_file);
+
+        // search right most child of page
+        struct btree_page right_child;
+        if (btree_page_read(db, &right_child, page.right_ptr, database_file))
+            return -1;
+
+        sqlite_sql_search_index_tree(db, &right_child, "tonga", sizeof results,
+                                     results, &found_pos, database_file);
+
+        btree_page_free(&right_child);
     }
 
-    // for (int i = 0; i < query->where_fields_count; i++) {
-    //     char *key = query->where_fields[i];
-    //     char *value = query->where_values[i];
-    //     printf("searching index for %s = %s\n", key, value);
-    // }
+    for (int i = 0; i < found_pos; i++) {
+        sqlite_sql_stmt_exec_select_rowid(results[i], table_ddl, query, db,
+                                          database_file);
+    }
 
     btree_page_free(&page);
     return 0;
@@ -110,7 +151,8 @@ static int sqlite_sql_stmt_exec_count(struct db *db,
     int count = 0;
     for (int i = 0; i < child_count; i++) {
         struct btree_page header;
-        uint64_t pn = btree_tinterior_cell_read(page_header, i, database_file);
+        uint64_t pn =
+            btree_tinterior_cell_read(page_header, i, NULL, database_file);
         btree_page_read(db, &header, pn, database_file);
         count += sqlite_sql_stmt_exec_count(db, &header, database_file);
         btree_page_free(&header);
@@ -193,6 +235,81 @@ static int sqlite_sql_stmt_exec_select_leaf(char **conditions,
     return result;
 }
 
+int sqlite_sql_stmt_exec_select_rowid(uint64_t rowid, struct schema_record *ddl,
+                                      struct sql_query *query, struct db *db,
+                                      FILE *database_file) {
+    uint64_t curr = ddl->rootpage;
+    struct btree_page *result_page;
+    do {
+        struct btree_page page;
+        if (btree_page_read(db, &page, curr, database_file))
+            return -1;
+
+        // reached leaf page, target rowid must be here or not found
+        if (page.page_type == TABLE_LEAF_PAGE) {
+            result_page = &page;
+            goto found_page;
+        }
+
+        for (int i = 0; i < page.cells_count; i++) {
+            int64_t crowid;
+            uint64_t left_pn =
+                btree_tinterior_cell_read(&page, i, &crowid, database_file);
+            if (rowid <= crowid) {
+                curr = left_pn;
+                goto next;
+            }
+        }
+
+        // try rightmost ptr
+        curr = page.right_ptr;
+next:
+        btree_page_free(&page);
+    } while (1);
+
+found_page:
+
+    for (int row = 0; row < result_page->cells_count; row++) {
+        struct btree_leaf_cell cell;
+        if (btree_leaf_cell_read(&cell, result_page, row, database_file)) {
+            fputs("failed to parse table page\n", stderr);
+            break;
+        }
+
+        if (cell.rowid != rowid) {
+            btree_leaf_cell_free(&cell);
+            continue;
+        }
+
+        for (int i = 0; i < query->fields_count; i++) {
+            int fp = hget(&ddl->col_index, query->fields[i]);
+            if (i > 0)
+                putchar('|');
+
+            if (fp < 0 || fp >= cell.record.fields_count) {
+                fprintf(stderr,
+                        "field parsing failed: %s field index %d out of "
+                        "bounds\n",
+                        query->fields[i], fp);
+                btree_leaf_cell_free(&cell);
+                return -1;
+            }
+
+            struct field *f = &cell.record.fields[fp];
+            if (f->type == FIELD_TYPE_TEXT) {
+                printf("%s", f->data);
+            } else if (f->type == FIELD_TYPE_NUMBER) {
+                printf("%ld", f->number);
+            }
+        }
+        btree_leaf_cell_free(&cell);
+        puts("");
+    }
+
+    btree_page_free(result_page);
+    return 0;
+}
+
 int sqlite_sql_stmt_exec_select_interiors(char **conditions,
                                           struct schema_record *ddl,
                                           struct sql_query *query,
@@ -202,7 +319,8 @@ int sqlite_sql_stmt_exec_select_interiors(char **conditions,
 
     for (int i = 0; i < child_count; i++) {
         struct btree_page child_page;
-        uint64_t pn = btree_tinterior_cell_read(parent_page, i, database_file);
+        uint64_t pn =
+            btree_tinterior_cell_read(parent_page, i, NULL, database_file);
 
         // TOOD: this logic is redundant with portions of
         // sqlite_sql_stmt_exec
@@ -210,8 +328,7 @@ int sqlite_sql_stmt_exec_select_interiors(char **conditions,
         if (child_page.page_type == TABLE_INTERIOR_PAGE) {
             sqlite_sql_stmt_exec_select_interiors(
                 conditions, ddl, query, &child_page, db, database_file);
-        } else if (child_page.page_type == TABLE_LEAF_PAGE ||
-                   child_page.page_type == INDEX_LEAF_PAGE) {
+        } else if (child_page.page_type == TABLE_LEAF_PAGE) {
             if (sqlite_sql_stmt_exec_select_leaf(conditions, ddl, &child_page,
                                                  query, database_file)) {
                 btree_page_free(&child_page);

@@ -46,6 +46,18 @@ static inline int fread_varint(int64_t *out, FILE *stream) {
     return c;
 }
 
+static inline int fread_be24(uint32_t *out, FILE *stream) {
+    unsigned char buf[3];
+    long c;
+    if ((c = fread(buf, 1, 3, stream) != 3)) {
+        long f = ftell(stream);
+        return 0;
+    }
+    *out = buf[0] << 16 | buf[1] << 8 | buf[2];
+    return 1;
+}
+
+
 static inline int fread_be32(uint32_t *out, FILE *stream) {
     unsigned char buf[4];
     long c;
