@@ -69,19 +69,19 @@ static int sqlite_sql_stmt_exec_count(struct db *db,
 
 static int sqlite_sql_stmt_exec_select_leaf(char **conditions,
                                             struct schema_record *ddl,
-                                            struct btree_page *page_header,
+                                            struct btree_page *page,
                                             struct sql_query *query,
                                             FILE *database_file) {
 
     int result = 0;
 
-    size_t row_count = page_header->cells_count;
+    size_t row_count = page->cells_count;
     int row = 0;
 
     for (row = 0; row < row_count; row++) {
         bool filtered = 0;
         struct btree_tleaf_cell cell;
-        if (btree_tleaf_cell_read(&cell, page_header, row, database_file)) {
+        if (btree_tleaf_cell_read(&cell, page, row, database_file)) {
             fputs("failed to parse table page\n", stderr);
             break;
         }
@@ -97,6 +97,7 @@ static int sqlite_sql_stmt_exec_select_leaf(char **conditions,
                 int fp = hget(&ddl->col_index, query->where_fields[i]);
                 struct field *f = &cell.record.fields[fp];
                 if (f->type == FIELD_TYPE_TEXT) {
+                    printf("does %s = %s\n", f->data, conditions[fp]);
                     if (conditions[fp] && strcmp(f->data, conditions[fp])) {
                         filtered = 1;
                     }
