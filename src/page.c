@@ -224,6 +224,7 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
                 break;
             case 1:
                 val = fgetc(stream);
+                val = 5;
                 break;
             case 2:
                 uint16_t val16;
@@ -233,7 +234,7 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
                     puts("error parsing numerical field of serial type 2");
                     return -1;
                 }
-                val = 5;
+                val = val16;
                 break;
             case 3:
                 fseek(stream, 3, SEEK_CUR); // todo read be24
