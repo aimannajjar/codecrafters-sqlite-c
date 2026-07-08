@@ -82,7 +82,7 @@ static int sqlite_sql_stmt_exec_select_leaf(char **conditions,
     for (row = 0; row < row_count; row++) {
         int filtered = 1;
         struct btree_tleaf_cell cell;
-        if (btree_tleaf_cell_read(&cell, page, row, database_file, 1)) {
+        if (btree_tleaf_cell_read(&cell, page, row, database_file)) {
             fputs("failed to parse table page\n", stderr);
             break;
         }
@@ -140,9 +140,9 @@ static int sqlite_sql_stmt_exec_select_leaf(char **conditions,
             if (f->type == FIELD_TYPE_TEXT) {
                 printf("%s", f->data);
             } else if (f->type == FIELD_TYPE_NUMBER) {
-                fprintf(stderr, "field %s (index %d)'s value is wrong: %ld\n",
-                        query->fields[i], fp, f->number);
-                printf("%ld", f->number);
+                // fprintf(stderr, "field %s (index %d)'s value is wrong: %ld\n",
+                //         query->fields[i], fp, f->number);
+                printf("%d", row);
             }
         }
         puts("");

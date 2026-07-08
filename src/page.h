@@ -60,7 +60,7 @@ int btree_page_read(struct db *db, struct btree_page *header, int first, FILE *s
 int btree_page_free(struct btree_page *header);
 int btree_tleaf_cell_free(struct btree_tleaf_cell *cell);
 int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
-                          struct btree_page *header, int index, FILE *stream, int debug);
+                          struct btree_page *header, int index, FILE *stream);
 int btree_cell_read(struct btree_tleaf_cell *cell, struct btree_page *header,
                     int index, FILE *stream);
 int btree_tinterior_cell_read(struct btree_page *header, int index,

@@ -100,8 +100,7 @@ int btree_tinterior_cell_read(struct btree_page *header, int index,
  ** Returns 0 on success, -1 on errors
  */
 int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
-                          struct btree_page *header, int index, FILE *stream,
-                          int debug) {
+                          struct btree_page *header, int index, FILE *stream) {
     if (header->page_type != TABLE_LEAF_PAGE) {
         printf("attempted to read leaf cell from wrong page type 0x%02x\n",
                header->page_type);
@@ -220,7 +219,6 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
             switch (column_types[i]) {
             case 0:
                 val = 0; // for now using 0 as SQL NULL
-                continue;
                 break;
             case 1:
                 val = fgetc(stream);
@@ -234,8 +232,6 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
                     return -1;
                 }
                 val = val16;
-                if (debug)
-                    val = 5;
                 break;
             case 3:
                 fseek(stream, 3, SEEK_CUR); // todo read be24
@@ -281,13 +277,6 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
                 return -1;
             }
 
-            if (debug && i == 0) {
-                // fprintf(stderr,
-                //         "i've just set field whose index is 0 to %ld and "
-                //         "serial type is %ld\n",
-                //         column_types[i], val);
-                // val = 4;
-            }
             f.number = val;
             fields[i] = f;
         }
