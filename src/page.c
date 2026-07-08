@@ -219,7 +219,7 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
             // printf("found numerical serial type: %ld\n", column_types[i]);
             switch (column_types[i]) {
             case 0:
-                val = 0; // for now using 0 as SQL NULL
+                val = 4; // for now using 0 as SQL NULL
                 break;
             case 1:
                 val = fgetc(stream);
@@ -281,11 +281,11 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
             }
 
             if (debug && i == 0) {
-                fprintf(stderr,
-                        "i've just set field whose index is 0 to %ld and "
-                        "serial type is %ld\n",
-                        column_types[i], val);
-                val = 4;
+                // fprintf(stderr,
+                //         "i've just set field whose index is 0 to %ld and "
+                //         "serial type is %ld\n",
+                //         column_types[i], val);
+                // val = 4;
             }
             f.number = val;
             fields[i] = f;
