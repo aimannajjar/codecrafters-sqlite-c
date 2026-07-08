@@ -95,10 +95,11 @@ static int sqlite_sql_stmt_exec_select_leaf(char **conditions,
         if (query->command & COMMAND_SELECT_WHERE) {
             for (int i = 0; i < query->where_fields_count; i++) {
                 int fp = hget(&ddl->col_index, query->where_fields[i]);
-                printf("field %s has condition = %s\n", query->where_fields[i],
-                       conditions[fp]);
+                printf("field %s (index %d) has condition = %s\n",
+                       query->where_fields[i], fp, conditions[fp]);
+                printf("Crate was \n\t%s\n", ddl->sql);
                 struct field *f = &cell.record.fields[fp];
-                printf("this row's value for this field is %s\n", f->data);
+                printf("this row's value for this field () is %s\n", f->data);
                 if (f->type == FIELD_TYPE_TEXT) {
                     printf("does %s = %s\n", f->data, conditions[fp]);
                     if (conditions[fp] && strcmp(f->data, conditions[fp])) {
