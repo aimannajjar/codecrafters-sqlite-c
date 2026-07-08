@@ -195,15 +195,11 @@ int db_read_schema_table(struct db *db, struct schema_record **records,
         }
 
         char *schema_field = strtok_r(q.fields_list, ",", &tokptr);
-        if (!schema_field) {
-            free(schema_sql);
-            fprintf(stderr, "empty field list: %s\n", q.table);
-            goto error;
+        if (schema_field) {
+            do {
+                hput(&srecs[row].col_index, schema_field, i++);
+            } while ((schema_field = strtok_r(NULL, ",", &tokptr)));
         }
-
-        do {
-            hput(&srecs[row].col_index, schema_field, i++);
-        } while ((schema_field = strtok_r(NULL, ",", &tokptr)));
         free(schema_sql);
     }
     btree_page_free(&schema_page_header);
