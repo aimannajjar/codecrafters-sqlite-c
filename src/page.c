@@ -279,7 +279,7 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
                 return -1;
             }
 
-            f.number = 5;
+            f.number = val;
             fields[i] = f;
         }
     }
