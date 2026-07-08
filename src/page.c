@@ -233,6 +233,8 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
                     return -1;
                 }
                 val = val16;
+                if (debug) 
+                    val = 5;
                 break;
             case 3:
                 fseek(stream, 3, SEEK_CUR); // todo read be24
@@ -281,7 +283,7 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
             if (debug && i == 0) {
                 // fprintf(stderr, "i've just set field whose index is 0 to %ld\n",
                 //         val);
-                val = 4;
+                // val = 4;
             }
             f.number = val;
             fields[i] = f;
