@@ -12,7 +12,7 @@
 #define MAX_SQL_STMT_LEN 4096
 
 
-static int global_autoincrement = 0;
+static int global_autoincrement = 1;
 
 int sqlite_cmd_sql_stmt(char *stmt, struct db *db, FILE *database_file) {
     // SQL command
@@ -106,8 +106,6 @@ static int sqlite_sql_stmt_exec_select_leaf(char **conditions,
                         filtered = 1;
                     } else {
                         filtered = 0;
-                        fprintf(stderr, "found match!! row:%d, %s = %s\n", row,
-                                f->data, conditions[fp]);
                     }
 
                 } else if (f->type == FIELD_TYPE_NUMBER) {
