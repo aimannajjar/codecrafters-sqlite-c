@@ -100,6 +100,7 @@ static int sqlite_sql_stmt_exec_select_leaf(char **conditions,
                         // printf("FILTERED OUT ROW %d\n", row);
                         filtered = 1;
                     } else {
+                        filtered = 0;
                         fprintf(stderr, "found match!! row:%d, %s = %s\n", row, f->data,
                                 conditions[fp]);
                     }
