@@ -99,9 +99,8 @@ static int sqlite_sql_stmt_exec_select_leaf(char **conditions,
                 //        query->where_fields[i], fp, conditions[fp]);
                 // printf("Create was \n\t%s\n", ddl->sql);
                 struct field *f = &cell.record.fields[fp];
-                // printf("this row's value for this field is %s\n", f->data);
                 if (f->type == FIELD_TYPE_TEXT) {
-                    // printf("does %s = %s\n", f->data, conditions[fp]);
+                    fprintf(stderr, "does %s = %s\n", f->data, conditions[fp]);
                     if (conditions[fp] && strcmp(f->data, conditions[fp])) {
                         filtered = 1;
                     }
