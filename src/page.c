@@ -224,7 +224,6 @@ int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
                 break;
             case 1:
                 val = fgetc(stream);
-                val = 5;
                 break;
             case 2:
                 uint16_t val16;
