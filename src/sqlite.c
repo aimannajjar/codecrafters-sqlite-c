@@ -38,7 +38,6 @@ int sqlite_cmd_sql_stmt(char *stmt, struct db *db, FILE *database_file) {
     goto not_found;
 
 found:
-    printf("FOUBND TABKE\n");
     sqlite_sql_stmt_exec(&records[i], &query, db, database_file);
     free(records);
     return 0;
@@ -96,13 +95,13 @@ static int sqlite_sql_stmt_exec_select_leaf(char **conditions,
         if (query->command & COMMAND_SELECT_WHERE) {
             for (int i = 0; i < query->where_fields_count; i++) {
                 int fp = hget(&ddl->col_index, query->where_fields[i]);
-                printf("field %s (index %d) has condition = %s\n",
-                       query->where_fields[i], fp, conditions[fp]);
-                printf("Create was \n\t%s\n", ddl->sql);
+                // printf("field %s (index %d) has condition = %s\n",
+                //        query->where_fields[i], fp, conditions[fp]);
+                // printf("Create was \n\t%s\n", ddl->sql);
                 struct field *f = &cell.record.fields[fp];
-                printf("this row's value for this field is %s\n", f->data);
+                // printf("this row's value for this field is %s\n", f->data);
                 if (f->type == FIELD_TYPE_TEXT) {
-                    printf("does %s = %s\n", f->data, conditions[fp]);
+                    // printf("does %s = %s\n", f->data, conditions[fp]);
                     if (conditions[fp] && strcmp(f->data, conditions[fp])) {
                         filtered = 1;
                     }
@@ -177,7 +176,7 @@ int sqlite_sql_stmt_exec(struct schema_record *schema, struct sql_query *query,
     struct btree_page rootpage;
     int result = 0;
 
-    printf("CREATE IS:\n\t%s\n", schema->sql);
+    fprintf(stderr, "CREATE IS:\n\t%s\n", schema->sql);
 
     btree_page_read(db, &rootpage, schema->rootpage, database_file);
     if (query->command & COMMAND_SELECT_COUNT) {
