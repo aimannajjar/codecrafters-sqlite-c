@@ -10,11 +10,9 @@
 
 /** reads a page header form current positon in stream
  ** it will all also read the cell_offsets array that immediately
- ** follows the header. if `first` is set, it will parse the 100-byte header
- ** that only appears in the first page. the `cell_offsets` array is
- ** allocated on the heap, call `btree_header_free` to deallocate it.
+ ** will allocate some data on heap, call btree_page_free to dealloc
  */
-int btree_header_read(struct db *db, struct btree_header *header,
+int btree_page_read(struct db *db, struct btree_page *header,
                       int page_number, FILE *stream) {
 
     assert(page_number && "page number should be 1-based");
@@ -80,7 +78,7 @@ int btree_header_read(struct db *db, struct btree_header *header,
     return 0;
 }
 
-int btree_tinterior_cell_read(struct btree_header *header, int index,
+int btree_tinterior_cell_read(struct btree_page *header, int index,
                               FILE *stream) {
 
     int cell_offset = header->cell_offsets[index];
@@ -103,7 +101,7 @@ int btree_tinterior_cell_read(struct btree_header *header, int index,
  ** Returns 0 on success, -1 on errors
  */
 int btree_tleaf_cell_read(struct btree_tleaf_cell *cell,
-                          struct btree_header *header, int index,
+                          struct btree_page *header, int index,
                           FILE *stream) {
     if (header->page_type != TABLE_LEAF_PAGE) {
         printf("attempted to read leaf cell from wrong page type 0x%02x\n",
@@ -292,7 +290,7 @@ overflow:
  ** this will not deallocate the passed `struct btree_header`,
  ** only any dynamic objects inside it
  */
-int btree_header_free(struct btree_header *header) {
+int btree_page_free(struct btree_page *header) {
     if (header->cells_count)
         free(header->cell_offsets);
     header->cell_offsets = NULL;

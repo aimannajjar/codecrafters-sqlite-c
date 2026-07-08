@@ -18,7 +18,8 @@ enum SQL_COMMAND {
 
 struct sql_query {
     char table[TABLE_NAME_MAX_LEN];
-    char fields[FIELDS_LIST_MAX_LEN];
+    char fields[SELECT_MAX_FIELD_COUNT][FIELDS_LIST_MAX_LEN];
+    char fields_list[FIELDS_LIST_MAX_LEN];
     int fields_count;
     char where_fields_list[FIELDS_LIST_MAX_LEN];
     char where_fields[SELECT_MAX_FIELD_COUNT][FIELD_NAME_MAX_LEN];

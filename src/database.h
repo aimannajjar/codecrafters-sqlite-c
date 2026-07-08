@@ -1,6 +1,7 @@
 #ifndef DATABASE_H
 #define DATABASE_H
 #include "page.h"
+#include "hashmap.h"
 #include <stdint.h>
 #include <stdio.h>
 
@@ -23,13 +24,15 @@ struct schema_record {
     char name[100];
     char tbl_name[100];
     uint64_t rootpage;
-    char sql[1024];
+    char sql[2048];
+    struct hashmap col_index;
 };
 
 int db_header_read(struct db *db, FILE *stream);
-int read_schema_page_header(struct db *db, struct btree_header *page_header,
-                            FILE *database_file);
-int read_schema_table(struct db *db, struct schema_record **records, FILE *database_file);
+int db_read_schema_page(struct db *db, struct btree_page *page_header,
+                        FILE *database_file);
+int db_read_schema_table(struct db *db, struct schema_record **records,
+                         FILE *database_file);
 
 extern uint16_t db_page_size;
 extern enum CHARSET_ENC db_text_encoding;

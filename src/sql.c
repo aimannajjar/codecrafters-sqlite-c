@@ -16,12 +16,13 @@ void strtolower(char *s) {
     (!strcmp(keyword, token) || !strcmp(keyword ",", token))
 
 static inline bool is_sql_keyword(char *tok) {
-    return (KEYWORD_MATCH(tok, "primary") || KEYWORD_MATCH(tok, "key") || KEYWORD_MATCH(tok, "autoincrement"));
+    return (KEYWORD_MATCH(tok, "primary") || KEYWORD_MATCH(tok, "key") ||
+            KEYWORD_MATCH(tok, "autoincrement"));
 }
 
 int sql_create_spec_parse(char *spec, struct sql_query *query) {
     // for now we're only interested in field names and not types
-    query->fields[0] = 0;
+    query->fields_list[0] = 0;
     query->fields_count = 0;
     char *tok = strtok(spec, " ,()");
     if (!tok)
@@ -40,9 +41,9 @@ int sql_create_spec_parse(char *spec, struct sql_query *query) {
 
         const char *fmt = (i - 1 == 0) ? "%s" : ",%s";
 
-        int c = snprintf(query->fields + offset, sizeof query->fields - offset,
-                         fmt, tok);
-        if (c < 0 || c >= sizeof query->fields - offset) {
+        int c = snprintf(query->fields_list + offset,
+                         sizeof query->fields_list - offset, fmt, tok);
+        if (c < 0 || c >= sizeof query->fields_list - offset) {
             fputs("error building field list or field list too big", stderr);
             goto invalid;
         }
@@ -64,7 +65,7 @@ int sql_parse(char *sql, struct sql_query *query) {
     int i = 0;
     tok = strtok(sql, " ");
     query->table[0] = '\0';
-    query->fields[0] = '\0';
+    query->fields_list[0] = '\0';
     query->command = COMMAND_INVALID;
 
     if (!tok)
@@ -103,17 +104,22 @@ int sql_parse(char *sql, struct sql_query *query) {
 
                         do {
 
-                            char *fmt =
-                                (j++ == 0 || query->fields[offset - 1] == ',')
-                                    ? "%s"
-                                    : ",%s";
+                            char *fmt = (j++ == 0 ||
+                                         query->fields_list[offset - 1] == ',')
+                                            ? "%s"
+                                            : ",%s";
 
-                            int c = snprintf(query->fields + offset,
-                                             sizeof query->fields - offset, fmt,
-                                             field_token);
+                            int c = snprintf(query->fields_list + offset,
+                                             sizeof query->fields_list - offset,
+                                             fmt, field_token);
+                            strncpy(query->fields[query->fields_count],
+                                    field_token, sizeof query->fields[0]);
+                            query->fields[query->fields_count]
+                                        [sizeof query->fields[0] - 1] = '\0';
                             query->fields_count++;
 
-                            if (c <= 0 || c >= sizeof query->fields - offset) {
+                            if (c <= 0 ||
+                                c >= sizeof query->fields_list - offset) {
                                 fputs("error building field list or field list "
                                       "too "
                                       "big",
@@ -124,7 +130,7 @@ int sql_parse(char *sql, struct sql_query *query) {
                         } while ((field_token = strtok_r(NULL, ",", &ptr)));
 
                     } while ((tok = strtok(NULL, " ")));
-                    query->fields[sizeof query->fields - 1] = 0;
+                    query->fields_list[sizeof query->fields_list - 1] = 0;
                 }
             } else if (query->command & COMMAND_CREATE) {
                 if (strcmp(tok, "table") != 0) {
@@ -196,7 +202,6 @@ int sql_parse(char *sql, struct sql_query *query) {
                         return -1;
                     }
                     offset += c;
-
 
                     where_tok = strtok(NULL, "='");
                     where_tok = strtok(NULL, "='");

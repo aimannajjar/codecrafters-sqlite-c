@@ -1,6 +1,7 @@
 #include "database.h"
 #include "endian.h"
 #include "page.h"
+#include "sql.h"
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -57,17 +58,17 @@ int db_header_read(struct db *db, FILE *stream) {
  ** this assumes database_file is positioned at header position.
  ** returns 0 on success, -1 otherwise
  **/
-int read_schema_page_header(struct db *db, struct btree_header *page_header,
-                            FILE *database_file) {
-    if (btree_header_read(db, page_header, 1, database_file) != 0) {
+int db_read_schema_page(struct db *db, struct btree_page *page_header,
+                        FILE *database_file) {
+    if (btree_page_read(db, page_header, 1, database_file) != 0) {
         puts("failed to parse page header");
-        btree_header_free(page_header);
+        btree_page_free(page_header);
         return -1;
     }
 
     if (page_header->page_type != TABLE_LEAF_PAGE) {
         puts("invalid first page");
-        btree_header_free(page_header);
+        btree_page_free(page_header);
         return -1;
     }
 
@@ -77,10 +78,11 @@ int read_schema_page_header(struct db *db, struct btree_header *page_header,
 /** reads the sqlite_schema page and allocates *records array pointed to by
  ** the first parameter, returns the number of records or -1 on errors
  */
-int read_schema_table(struct db *db, struct schema_record **records, FILE *database_file) {
-    struct btree_header schema_page_header;
+int db_read_schema_table(struct db *db, struct schema_record **records,
+                         FILE *database_file) {
+    struct btree_page schema_page_header;
 
-    if (read_schema_page_header(db, &schema_page_header, database_file)) {
+    if (db_read_schema_page(db, &schema_page_header, database_file)) {
         return -1;
     }
 
@@ -101,7 +103,7 @@ int read_schema_table(struct db *db, struct schema_record **records, FILE *datab
 
     if (!srecs) {
         perror("malloc");
-        btree_header_free(&schema_page_header);
+        btree_page_free(&schema_page_header);
         return -1;
     }
 
@@ -175,13 +177,42 @@ int read_schema_table(struct db *db, struct schema_record **records, FILE *datab
             }
         }
         btree_tleaf_cell_free(&cell);
+
+        // populate field_name -> index map
+        char *schema_sql = strdup(srecs[row].sql);
+        if (!schema_sql) {
+            perror("strdup");
+            goto error;
+        }
+
+        int i = 0;
+        char *tokptr;
+        struct sql_query q;
+        if (sql_parse(schema_sql, &q)) {
+            free(schema_sql);
+            fputs("failed parse ddl\n", stderr);
+            goto error;
+        }
+
+        char *schema_field = strtok_r(q.fields_list, ",", &tokptr);
+        if (!schema_field) {
+            free(schema_sql);
+            fprintf(stderr, "empty field list: %s\n", q.table);
+            goto error;
+        }
+
+        do {
+            hput(&srecs[row].col_index, schema_field, i++);
+        } while ((schema_field = strtok_r(NULL, ",", &tokptr)));
+        free(schema_sql);
     }
-    btree_header_free(&schema_page_header);
+    btree_page_free(&schema_page_header);
     *records = srecs;
+
     return cells_len;
 
 error:
-    btree_header_free(&schema_page_header);
+    btree_page_free(&schema_page_header);
     free(srecs);
     return -1;
 }
