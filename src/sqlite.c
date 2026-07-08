@@ -95,6 +95,8 @@ static int sqlite_sql_stmt_exec_select_leaf(char **conditions,
         if (query->command & COMMAND_SELECT_WHERE) {
             for (int i = 0; i < query->where_fields_count; i++) {
                 int fp = hget(&ddl->col_index, query->where_fields[i]);
+                printf("field %s as condition = %s\n", query->where_fields[i],
+                       conditions[fp]);
                 struct field *f = &cell.record.fields[fp];
                 if (f->type == FIELD_TYPE_TEXT) {
                     printf("does %s = %s\n", f->data, conditions[fp]);
@@ -124,9 +126,10 @@ static int sqlite_sql_stmt_exec_select_leaf(char **conditions,
                 putchar('|');
 
             if (fp < 0 || fp >= cell.record.fields_count) {
-                fprintf(stderr,
-                        "field parsing failed: %s field index %d out of bounds\n",
-                        query->fields[i], fp);
+                fprintf(
+                    stderr,
+                    "field parsing failed: %s field index %d out of bounds\n",
+                    query->fields[i], fp);
                 btree_tleaf_cell_free(&cell);
                 return -1;
             }
