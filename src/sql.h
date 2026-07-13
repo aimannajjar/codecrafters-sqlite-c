@@ -1,11 +1,15 @@
 #ifndef SQL_H
 #define SQL_H
 
+#include <stddef.h>
 #define TABLE_NAME_MAX_LEN 100
 #define FIELDS_LIST_MAX_LEN 1024
 #define FIELD_NAME_MAX_LEN 32
 #define FIELD_VALUE_TEXT_MAX_LEN 1024
 #define SELECT_MAX_FIELD_COUNT 20
+
+#define SQL_STATEMENT_FIELD_MAX_LEN 20
+#define SQL_PARSE_ERROR_STRING_MAX 256
 
 enum SQL_COMMAND {
     COMMAND_INVALID = 0,
@@ -17,18 +21,34 @@ enum SQL_COMMAND {
     COMMAND_CREATE_INDEX = 64,
 };
 
+enum SQL_STATEMENT_TYPE {
+    SQL_SELECT_STATEMENT,
+    SQL_CREATE_STATEMENT,
+};
+
+struct sql_field {
+    size_t field_len;
+    const char *field_name;
+};
+
 struct sql_query {
     char table[TABLE_NAME_MAX_LEN];
     char fields[SELECT_MAX_FIELD_COUNT][FIELDS_LIST_MAX_LEN];
     char fields_list[FIELDS_LIST_MAX_LEN];
-    int fields_count;
+    size_t fields_count;
     char where_fields_list[FIELDS_LIST_MAX_LEN];
     char where_fields[SELECT_MAX_FIELD_COUNT][FIELD_NAME_MAX_LEN];
     char where_values[SELECT_MAX_FIELD_COUNT][FIELD_VALUE_TEXT_MAX_LEN];
     int where_fields_count;
     enum SQL_COMMAND command;
+
+    enum SQL_STATEMENT_TYPE type;
+    bool parse_error;
+    struct sql_field fieldsn[SQL_STATEMENT_FIELD_MAX_LEN];
+    char parse_error_string[SQL_PARSE_ERROR_STRING_MAX];
 };
 
 int sql_parse(char *sql, struct sql_query *query);
+struct sql_query sql_parse_new(const char *query);
 
 #endif // SQL_H

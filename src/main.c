@@ -1,10 +1,26 @@
 #include "database.h"
 #include "sqlite.h"
+#include "sql.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 int main(int argc, char *argv[]) {
+
+
+    struct sql_query q = sql_parse_new(argv[1]);
+
+    if (q.parse_error) {
+        fprintf(stderr, "%s\n", q.parse_error_string);
+    } else {
+        printf("Parsed:\n");
+        printf("Type:\t\t%s\n", (q.type == SQL_SELECT_STATEMENT) ? "SELECT" : "CREATE");
+        printf("Fields Count:\t%zu\n", q.fields_count);
+    }
+
+    exit(0);
+
+
     if (argc != 3) {
         fprintf(stderr, "Usage: %s <database path> <command>\n", argv[0]);
         return 1;
