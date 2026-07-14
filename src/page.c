@@ -274,7 +274,7 @@ int btree_record_read(int rowid, struct record *record, FILE *stream) {
                 return -1;
             }
             fields[i].type = FIELD_TYPE_BLOB;
-            fields[i].data = t;
+            fields[i].as.data = t;
             fields[i].size = size;
         } else if (column_types[i] >= 13 && (column_types[i] & 0x1)) {
             // text
@@ -296,7 +296,7 @@ int btree_record_read(int rowid, struct record *record, FILE *stream) {
             }
             t[size] = '\0';
             fields[i].type = FIELD_TYPE_TEXT;
-            fields[i].data = t;
+            fields[i].as.data = t;
             fields[i].size = size + 1; // add 1 for \0
         } else {
             // numerical types
@@ -375,7 +375,7 @@ int btree_record_read(int rowid, struct record *record, FILE *stream) {
                 return -1;
             }
 
-            f.number = val;
+            f.as.number = val;
             fields[i] = f;
         }
     }
@@ -421,8 +421,8 @@ int btree_index_cell_free(struct btree_index_cell *cell) {
 void record_fields_free(struct field *fields, size_t len) {
     for (int i = 0; i < len; i++) {
         if (fields[i].type != FIELD_TYPE_NUMBER) {
-            free(fields[i].data);
-            fields[i].data = NULL;
+            free(fields[i].as.data);
+            fields[i].as.data = NULL;
         }
     }
 }

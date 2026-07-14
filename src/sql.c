@@ -29,7 +29,8 @@ enum sql_token_type {
     TOKEN_KEY,
     TOKEN_AUTOINCREMENT,
     TOKEN_UNIQUE,
-    TOKEN_NOT_NULL,
+    TOKEN_NOT,
+    TOKEN_NULL,
 
     TOKEN_END,
     TOKEN_INVALID,
@@ -184,9 +185,16 @@ static struct sql_token sql_lex_match_identifier(struct sql_lexer *lexer) {
     case 'u':
         return sql_lex_match_keyword_part(lexer, 1, 5, "nique", TOKEN_KEY);
     case 'n':
-        return sql_lex_match_keyword_part(
-            lexer, 1, 7, "ot null",
-            TOKEN_NOT_NULL); // currently only need nulls when they're not ;)
+        if (lexer->current - lexer->start > 1) {
+            switch (CHAR_LOWER(lexer->start[1])) {
+            case 'o':
+                return sql_lex_match_keyword_part(lexer, 2, 1, "t",
+                                                  TOKEN_NOT);
+            case 'u':
+                return sql_lex_match_keyword_part(lexer, 2, 2, "ll",
+                                                  TOKEN_NULL);
+            }
+        }
     case 'c':
         if (lexer->current - lexer->start > 1) {
             switch (CHAR_LOWER(lexer->start[1])) {
@@ -418,13 +426,6 @@ static void sql_parse_create_table_field(struct sql_parser *parser,
     }
     q->fields_count++;
 
-    // now expexting a type
-    // if (parser->current.type != TOKEN_TEXT &&
-    //     parser->current.type != TOKEN_INTEGER)
-    //     return sql_parse_error(parser, q, "expected type 'integer' or
-    //     'text'");
-    // sql_parse_advance(parser);
-
     // consume column constrains tokens
     for (;;) {
         switch (parser->current.type) {
@@ -437,7 +438,8 @@ static void sql_parse_create_table_field(struct sql_parser *parser,
         case TOKEN_PRIMARY:
         case TOKEN_AUTOINCREMENT:
         case TOKEN_UNIQUE:
-        case TOKEN_NOT_NULL:
+        case TOKEN_NOT:
+        case TOKEN_NULL:
             break; // currently we don't do anything with these
         default:
             return sql_parse_error(parser, q, "unexpected token");
@@ -454,12 +456,19 @@ static void sql_parse_create_table(struct sql_parser *parser,
     q->type = SQL_CREATE_TABLE_STATEMENT;
 
     // table name
-    if (parser->current.type != TOKEN_IDENTIFIER)
+    if (parser->current.type != TOKEN_IDENTIFIER &&
+        parser->current.type != TOKEN_STRING)
         return sql_parse_error(parser, q, "expected identifier");
     sql_parse_advance(parser);
 
     q->table_name = parser->previous.start;
     q->table_name_len = parser->previous.length;
+
+    if (parser->previous.type == TOKEN_STRING) {
+        // strip quotes from quoted field names
+        q->table_name++;
+        q->table_name_len -= 2;
+    }
 
     // field list openning
     if (parser->current.type != TOKEN_LEFT_PAREN)
@@ -542,4 +551,3 @@ struct sql_query sql_parse(const char *query) {
 
     return q;
 }
-

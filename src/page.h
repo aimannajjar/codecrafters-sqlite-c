@@ -60,7 +60,7 @@ struct field {
     union {
         char *data;
         int64_t number;
-    };
+    } as;
 };
 
 struct db;

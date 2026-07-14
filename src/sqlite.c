@@ -84,13 +84,13 @@ int sqlite_sql_search_index_tree(struct db *db, struct btree_page *page,
         for (size_t i = 0; i < cell.record.fields_count; i++) {
             struct field *f = &cell.record.fields[i];
             if (f->type == FIELD_TYPE_TEXT) {
-                if (!strncmp(condition.field_value, f->data,
+                if (!strncmp(condition.field_value, f->as.data,
                              condition.field_value_len)) {
                     match = 1;
                 }
             } else if (f->type == FIELD_TYPE_NUMBER) {
                 if (match) {
-                    results[(*curr)++] = f->number;
+                    results[(*curr)++] = f->as.number;
                 }
             }
         }
@@ -203,20 +203,23 @@ static int sqlite_sql_stmt_exec_select_leaf(struct schema_record *ddl,
                 // currenlty only supporting AND congjunction
                 // also only supporting exact match filters for now
                 struct field *f = &cell.record.fields[fp];
-                if (cond.is_numeric) {
+                if (cond.is_numeric && f->type == FIELD_TYPE_NUMBER) {
                     int v =
                         strtol(cond.field_value, NULL, cond.field_value_len);
-                    if (v != f->number) {
+                    if (v != f->as.number) {
                         filtered = 1;
                         break;
                     }
-                } else {
-                    if (strncmp(f->data, cond.field_value,
+                } else if (!cond.is_numeric && f->type == FIELD_TYPE_TEXT) {
+                    if (strncmp(f->as.data, cond.field_value,
                                 cond.field_value_len)) {
                         filtered = 1;
                     } else {
                         filtered = 0;
                     }
+                } else {
+                    // this would happen in cause of overflows
+                    continue;
                 }
             }
             if (filtered) {
@@ -241,9 +244,9 @@ static int sqlite_sql_stmt_exec_select_leaf(struct schema_record *ddl,
 
             struct field *f = &cell.record.fields[fp];
             if (f->type == FIELD_TYPE_TEXT) {
-                printf("%s", f->data);
+                printf("%s", f->as.data);
             } else if (f->type == FIELD_TYPE_NUMBER) {
-                printf("%ld", f->number);
+                printf("%ld", f->as.number);
             }
         }
         puts("");
@@ -317,9 +320,9 @@ found_page:
 
             struct field *f = &cell.record.fields[fp];
             if (f->type == FIELD_TYPE_TEXT) {
-                printf("%s", f->data);
+                printf("%s", f->as.data);
             } else if (f->type == FIELD_TYPE_NUMBER) {
-                printf("%ld", f->number);
+                printf("%ld", f->as.number);
             }
         }
         btree_leaf_cell_free(&cell);

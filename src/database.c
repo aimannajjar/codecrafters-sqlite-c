@@ -133,7 +133,7 @@ int db_read_schema_table(struct db *db, struct schema_record **records,
                     printf("invalid schema field type row=%d,col=%d\n", row, i);
                     goto error;
                 }
-                strncpy(srecs[row].type, cell.record.fields[i].data,
+                strncpy(srecs[row].type, cell.record.fields[i].as.data,
                         sizeof(srecs[row].type));
                 srecs[row].type[sizeof srecs[row].type - 1] = '\0';
                 break;
@@ -143,7 +143,7 @@ int db_read_schema_table(struct db *db, struct schema_record **records,
                     printf("invalid schema field type row=%d,col=%d\n", row, i);
                     goto error;
                 }
-                strncpy(srecs[row].name, cell.record.fields[i].data,
+                strncpy(srecs[row].name, cell.record.fields[i].as.data,
                         sizeof(srecs[row].name));
                 srecs[row].name[sizeof srecs[row].name - 1] = '\0';
                 break;
@@ -153,7 +153,7 @@ int db_read_schema_table(struct db *db, struct schema_record **records,
                     printf("invalid schema field type row=%d,col=%d\n", row, i);
                     goto error;
                 }
-                strncpy(srecs[row].tbl_name, cell.record.fields[i].data,
+                strncpy(srecs[row].tbl_name, cell.record.fields[i].as.data,
                         sizeof(srecs[row].tbl_name));
                 srecs[row].tbl_name[sizeof srecs[row].tbl_name - 1] = '\0';
                 break;
@@ -163,14 +163,14 @@ int db_read_schema_table(struct db *db, struct schema_record **records,
                     printf("invalid schema field type row=%d,col=%d\n", row, i);
                     goto error;
                 }
-                srecs[row].rootpage = cell.record.fields[i].number;
+                srecs[row].rootpage = cell.record.fields[i].as.number;
                 break;
             case 4:
                 if (field_type != FIELD_TYPE_TEXT) {
                     printf("invalid schema field type row=%d,col=%d\n", row, i);
                     goto error;
                 }
-                strncpy(srecs[row].sql, cell.record.fields[i].data,
+                strncpy(srecs[row].sql, cell.record.fields[i].as.data,
                         sizeof(srecs[row].sql));
                 srecs[row].sql[sizeof srecs[row].sql - 1] = '\0';
                 break;
