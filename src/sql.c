@@ -20,6 +20,7 @@ enum sql_token_type {
     TOKEN_COUNT,
     TOKEN_CREATE,
     TOKEN_TABLE,
+    TOKEN_INDEX,
     TOKEN_AND,
     TOKEN_IDENTIFIER,
 
@@ -75,12 +76,15 @@ static struct sql_token sql_lex_match_keyword_part(struct sql_lexer *lexer,
                                                    size_t start, size_t len,
                                                    const char *part,
                                                    enum sql_token_type type) {
-    if (lexer->current - lexer->start == start + len &&
-        0 == memcmp(lexer->start + start, part, len)) {
+    if (lexer->current - lexer->start != start + len)
+        return sql_lex_tokenize(lexer, TOKEN_IDENTIFIER);
 
-        return sql_lex_tokenize(lexer, type);
+    while (len--) {
+        if (part[len] != CHAR_LOWER(lexer->start[start + len]))
+            return sql_lex_tokenize(lexer, TOKEN_IDENTIFIER);
     }
-    return sql_lex_tokenize(lexer, TOKEN_IDENTIFIER);
+
+    return sql_lex_tokenize(lexer, type);
 }
 
 static struct sql_token sql_lexer_invalid_token(struct sql_lexer *lexer,
@@ -301,7 +305,7 @@ static void sql_parse_select_condition(struct sql_parser *parser,
     q->conditions[q->conditions_count++] = (struct sql_select_condition){
         .field_name = field_name,
         .field_name_len = field_name_len,
-        .field_value = field_value + 1, // skip lead quote mark
+        .field_value = field_value + 1,         // skip lead quote mark
         .field_value_len = field_value_len - 2, // skip ending quote mark
         .is_numeric = field_value_numeric,
     };

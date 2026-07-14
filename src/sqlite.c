@@ -191,6 +191,14 @@ static int sqlite_sql_stmt_exec_select_leaf(char **conditions,
                 int fp =
                     hget(&ddl->col_index, cond.field_name_len, cond.field_name);
 
+                if (fp == -1) {
+                    fprintf(stderr, "column '%.*s' in where clause not found\n",
+                            (int)cond.field_name_len, cond.field_name, stderr);
+
+                    btree_leaf_cell_free(&cell);
+                    return -1;
+                }
+
                 // currenlty only supporting AND congjunction
                 // also only supporting exact match filters for now
                 struct field *f = &cell.record.fields[fp];
@@ -217,16 +225,15 @@ static int sqlite_sql_stmt_exec_select_leaf(char **conditions,
         }
 
         for (int i = 0; i < query->fields_count; i++) {
-            int fp = hget(&ddl->col_index, query->fieldsn[i].field_len,
-                          query->fieldsn[i].field_name);
+            struct sql_field field = query->fieldsn[i];
+            int fp = hget(&ddl->col_index, field.field_len, field.field_name);
             if (i > 0)
                 putchar('|');
 
             if (fp < 0 || fp >= cell.record.fields_count) {
-                fprintf(stderr,
-                        "field parsing failed: %s field index %d out of "
-                        "bounds\n",
-                        query->fields[i], fp);
+                fprintf(stderr, "select column '%.*s' not found\n",
+                        (int)field.field_len, field.field_name);
+
                 btree_leaf_cell_free(&cell);
                 return -1;
             }
@@ -242,6 +249,7 @@ static int sqlite_sql_stmt_exec_select_leaf(char **conditions,
 
         btree_leaf_cell_free(&cell);
     }
+
     return result;
 }
 
