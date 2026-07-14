@@ -9,6 +9,7 @@ enum sql_token_type {
     TOKEN_STAR,
     TOKEN_EQUAL,
     TOKEN_STRING,
+    TOKEN_NUMBER,
     TOKEN_LEFT_PAREN,
     TOKEN_RIGHT_PAREN,
     TOKEN_COMMA,
@@ -19,6 +20,7 @@ enum sql_token_type {
     TOKEN_COUNT,
     TOKEN_CREATE,
     TOKEN_TABLE,
+    TOKEN_AND,
     TOKEN_IDENTIFIER,
 
     TOKEN_END,
@@ -41,6 +43,12 @@ struct sql_lexer {
     ({                                                                         \
         char a = CHAR_LOWER(c);                                                \
         a >= 'a' && a <= 'z';                                                  \
+    })
+
+#define IS_DIGIT(c)                                                            \
+    ({                                                                         \
+        char a = c;                                                            \
+        a >= '0' && a <= '9';                                                  \
     })
 
 static char sql_lex_peek(struct sql_lexer *lexer) { return *lexer->current; }
@@ -68,7 +76,7 @@ static struct sql_token sql_lex_match_keyword_part(struct sql_lexer *lexer,
                                                    const char *part,
                                                    enum sql_token_type type) {
     if (lexer->current - lexer->start == start + len &&
-        memcmp(lexer->start, part, len)) {
+        0 == memcmp(lexer->start + start, part, len)) {
 
         return sql_lex_tokenize(lexer, type);
     }
@@ -88,26 +96,40 @@ static bool sql_lex_eof(struct sql_lexer *lexer) {
 
 static struct sql_token sql_lex_match_string(struct sql_lexer *lexer,
                                              char quote_type) {
-    sql_lex_advance(lexer); // skip quote
+    sql_lex_advance(lexer); // consume quote mark
     while (!sql_lex_eof(lexer) && sql_lex_peek(lexer) != quote_type)
         sql_lex_advance(lexer);
 
     if (*lexer->current != quote_type)
         return sql_lexer_invalid_token(lexer, "unterminated string");
 
+    // consume ending quote
+    sql_lex_advance(lexer);
+
     return sql_lex_tokenize(lexer, TOKEN_STRING);
 }
 
+static struct sql_token sql_lex_match_number(struct sql_lexer *lexer) {
+
+    while (!sql_lex_eof(lexer) && IS_DIGIT(sql_lex_peek(lexer)))
+        sql_lex_advance(lexer);
+
+    return sql_lex_tokenize(lexer, TOKEN_NUMBER);
+}
+
 static struct sql_token sql_lex_match_identifier(struct sql_lexer *lexer) {
-    while (!sql_lex_eof(lexer) && IS_ALPHA(sql_lex_peek(lexer)))
+    while (!sql_lex_eof(lexer) &&
+           (IS_ALPHA(sql_lex_peek(lexer)) || IS_DIGIT(sql_lex_peek(lexer))))
         sql_lex_advance(lexer);
 
     // was it a keyword?
-    switch (*lexer->start) {
+    switch (CHAR_LOWER(*lexer->start)) {
+    case 'a':
+        return sql_lex_match_keyword_part(lexer, 1, 2, "nd", TOKEN_AND);
     case 's':
         return sql_lex_match_keyword_part(lexer, 1, 5, "elect", TOKEN_SELECT);
     case 'f':
-        return sql_lex_match_keyword_part(lexer, 1, 3, "rom", TOKEN_SELECT);
+        return sql_lex_match_keyword_part(lexer, 1, 3, "rom", TOKEN_FROM);
     case 'w':
         return sql_lex_match_keyword_part(lexer, 1, 4, "here", TOKEN_WHERE);
     case 't':
@@ -148,6 +170,9 @@ struct sql_token sql_lex_scan_token(struct sql_lexer *lexer) {
     if (IS_ALPHA(c))
         return sql_lex_match_identifier(lexer);
 
+    if (IS_DIGIT(c))
+        return sql_lex_match_number(lexer);
+
     switch (c) {
     SIMPLE_MATCH('*', TOKEN_STAR)
     SIMPLE_MATCH('=', TOKEN_EQUAL)
@@ -156,7 +181,7 @@ struct sql_token sql_lex_scan_token(struct sql_lexer *lexer) {
     SIMPLE_MATCH(',', TOKEN_COMMA)
     case '"':
     case '\'':
-        return sql_lex_match_string(lexer, *lexer->current);
+        return sql_lex_match_string(lexer, c);
     }
     // clang-format on
 
@@ -173,8 +198,12 @@ struct sql_parser {
 
 static void sql_parse_error(struct sql_parser *parser, struct sql_query *q,
                             const char *msg) {
-    sprintf(q->parse_error_string, "error at %.*s: %s",
-            (int)parser->previous.length, parser->previous.start, msg);
+    if (parser->current.type != TOKEN_END) {
+        sprintf(q->parse_error_string, "error at '%.*s': %s",
+                (int)parser->current.length, parser->current.start, msg);
+    } else {
+        sprintf(q->parse_error_string, "error at end: %s", msg);
+    }
     q->parse_error = true;
 }
 
@@ -186,9 +215,10 @@ static void sql_parse_advance(struct sql_parser *parser) {
 static void sql_parse_select_field_list(struct sql_parser *parser,
                                         struct sql_query *q) {
 
+    sql_parse_advance(parser);
+
     switch (parser->previous.type) {
     case TOKEN_STAR:
-        q->type = SQL_SELECT_STATEMENT;
         q->fieldsn[q->fields_count++] = (struct sql_field){
             .field_name = "*",
             .field_len = 1,
@@ -200,25 +230,115 @@ static void sql_parse_select_field_list(struct sql_parser *parser,
                 .field_name = parser->previous.start,
                 .field_len = parser->previous.length,
             };
-            sql_parse_advance(parser);
-            if (parser->previous.type != TOKEN_COMMA)
+            if (parser->current.type != TOKEN_COMMA)
                 break;
-            sql_parse_advance(parser); // skip the comma
-            if (parser->previous.type != TOKEN_IDENTIFIER)
+            sql_parse_advance(parser);
+            if (parser->current.type != TOKEN_IDENTIFIER)
                 return sql_parse_error(parser, q, "expected identifier");
+            sql_parse_advance(parser);
         }
+        break;
+    case TOKEN_COUNT:
+        q->type = SQL_SELECT_COUNT_STATEMENT;
+        if (parser->current.type != TOKEN_LEFT_PAREN)
+            return sql_parse_error(parser, q, "expected left parenthesis '('");
+
+        sql_parse_advance(parser);
+        sql_parse_select_field_list(parser, q);
+
+        if (parser->current.type != TOKEN_RIGHT_PAREN)
+            return sql_parse_error(parser, q, "expected right parenthesis ')'");
+        sql_parse_advance(parser);
 
     default:
     }
 }
 
-static void sql_parse_select(struct sql_parser *parser, struct sql_query *q) {
+static void sql_parse_select_from(struct sql_parser *parser,
+                                  struct sql_query *q) {
     sql_parse_advance(parser);
+
+    if (parser->previous.type != TOKEN_FROM)
+        return sql_parse_error(parser, q, "expected 'FROM'");
+
+    sql_parse_advance(parser);
+    if (parser->previous.type != TOKEN_IDENTIFIER)
+        return sql_parse_error(parser, q, "expected identifier");
+}
+
+static void sql_parse_select_condition(struct sql_parser *parser,
+                                       struct sql_query *q) {
+
+    const char *field_name, *field_value;
+    size_t field_name_len, field_value_len;
+    bool field_value_numeric;
+
+    sql_parse_advance(parser);
+    if (parser->current.type != TOKEN_IDENTIFIER)
+        return sql_parse_error(parser, q, "expected field identifier");
+
+    field_name = parser->current.start;
+    field_name_len = parser->current.length;
+
+    sql_parse_advance(parser);
+    // only supporting = for now
+    if (parser->current.type != TOKEN_EQUAL) {
+        return sql_parse_error(parser, q, "expected '='");
+    }
+
+    sql_parse_advance(parser);
+    if (parser->current.type != TOKEN_STRING &&
+        parser->current.type != TOKEN_NUMBER)
+        return sql_parse_error(parser, q, "expected a string or number");
+
+    field_value = parser->current.start;
+    field_value_len = parser->current.length;
+    field_value_numeric = parser->current.type == TOKEN_NUMBER;
+
+    q->conditions[q->conditions_count++] = (struct sql_select_condition){
+        .field_name = field_name,
+        .field_name_len = field_name_len,
+        .field_value = field_value,
+        .field_value_len = field_value_len,
+        .is_numeric = field_value_numeric,
+    };
+
+    sql_parse_advance(parser);
+}
+
+static void sql_parse_select_where(struct sql_parser *parser,
+                                   struct sql_query *q) {
+
+    while (1) {
+        sql_parse_select_condition(parser, q);
+
+        if (parser->current.type != TOKEN_AND) {
+            break;
+        }
+    }
+
+    if (parser->current.type != TOKEN_END)
+        return sql_parse_error(parser, q, "expected statement end or 'and'");
+}
+
+static void sql_parse_select(struct sql_parser *parser, struct sql_query *q) {
+    q->type = SQL_SELECT_STATEMENT;
 
     // parse field list
     sql_parse_select_field_list(parser, q);
     if (q->parse_error)
         return;
+
+    // parse field list
+    sql_parse_select_from(parser, q);
+    if (q->parse_error)
+        return;
+
+    if (parser->current.type == TOKEN_WHERE)
+        sql_parse_select_where(parser, q);
+    else if (parser->current.type != TOKEN_END)
+        return sql_parse_error(parser, q,
+                               "expected statement end or where clause");
 }
 
 static void sql_parse_create(struct sql_parser *parser, struct sql_query *q) {}
@@ -251,6 +371,7 @@ struct sql_query sql_parse_new(const char *query) {
     struct sql_query q = {
         .fields_count = 0,
         .parse_error = false,
+        .conditions_count = 0,
     };
 
     sql_parse_advance(&parser);

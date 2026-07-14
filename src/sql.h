@@ -10,6 +10,7 @@
 
 #define SQL_STATEMENT_FIELD_MAX_LEN 20
 #define SQL_PARSE_ERROR_STRING_MAX 256
+#define SQL_STATEMENT_MAX_CONDITIONS_LEN 20
 
 enum SQL_COMMAND {
     COMMAND_INVALID = 0,
@@ -23,12 +24,22 @@ enum SQL_COMMAND {
 
 enum SQL_STATEMENT_TYPE {
     SQL_SELECT_STATEMENT,
+    SQL_SELECT_COUNT_STATEMENT,
     SQL_CREATE_STATEMENT,
 };
 
 struct sql_field {
+    const char *field_name;  // a slice from query, not nul-terminated, use len
     size_t field_len;
-    const char *field_name;
+};
+
+struct sql_select_condition {
+    const char *field_name; // a slice from query, not nul-terminated, use len
+    size_t field_name_len;
+
+    const char *field_value; // a slice from query, not nul-terminated, use len
+    size_t field_value_len;
+    bool is_numeric;
 };
 
 struct sql_query {
@@ -46,6 +57,8 @@ struct sql_query {
     bool parse_error;
     struct sql_field fieldsn[SQL_STATEMENT_FIELD_MAX_LEN];
     char parse_error_string[SQL_PARSE_ERROR_STRING_MAX];
+    struct sql_select_condition conditions[SQL_STATEMENT_MAX_CONDITIONS_LEN];
+    size_t conditions_count;
 };
 
 int sql_parse(char *sql, struct sql_query *query);

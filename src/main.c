@@ -1,12 +1,11 @@
 #include "database.h"
-#include "sqlite.h"
 #include "sql.h"
+#include "sqlite.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 int main(int argc, char *argv[]) {
-
 
     struct sql_query q = sql_parse_new(argv[1]);
 
@@ -14,12 +13,30 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "%s\n", q.parse_error_string);
     } else {
         printf("Parsed:\n");
-        printf("Type:\t\t%s\n", (q.type == SQL_SELECT_STATEMENT) ? "SELECT" : "CREATE");
+        printf("Type:\t\t%s\n", (q.type == SQL_SELECT_STATEMENT) ? "SELECT"
+                                : (q.type == SQL_SELECT_COUNT_STATEMENT)
+                                    ? "SELECT COUNT"
+                                    : "CREATE");
         printf("Fields Count:\t%zu\n", q.fields_count);
+        printf("Cond. Count:\t%zu\n", q.conditions_count);
+        printf("\n");
+        printf("---- FIELDS ----\n");
+        for (int i = 0; i < q.fields_count; i++) {
+            printf("%d - %.*s \n", i, (int)q.fieldsn[i].field_len,
+                   q.fieldsn[i].field_name);
+        }
+        printf("\n");
+        printf("---- CONDITIONS ----\n");
+        for (int i = 0; i < q.conditions_count; i++) {
+            printf("%d - %.*s = ", i, (int)q.conditions[i].field_name_len,
+                   q.conditions[i].field_name);
+            printf("%.*s\n", (int)q.conditions[i].field_value_len,
+                   q.conditions[i].field_value);
+        }
+
     }
 
     exit(0);
-
 
     if (argc != 3) {
         fprintf(stderr, "Usage: %s <database path> <command>\n", argv[0]);
@@ -30,9 +47,8 @@ int main(int argc, char *argv[]) {
     const char *database_file_path = argv[1];
     const char *command = argv[2];
 
-
     FILE *database_file = fopen(database_file_path, "rb");
-    
+
     if (!database_file) {
         perror(argv[1]);
         return 1;
@@ -85,4 +101,3 @@ close:
 
     return result;
 }
-
