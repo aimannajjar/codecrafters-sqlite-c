@@ -24,6 +24,14 @@ enum sql_token_type {
     TOKEN_AND,
     TOKEN_IDENTIFIER,
 
+    TOKEN_INTEGER,
+    TOKEN_TEXT,
+    TOKEN_PRIMARY,
+    TOKEN_KEY,
+    TOKEN_AUTOINCREMENT,
+    TOKEN_UNIQUE,
+    TOKEN_NOT_NULL,
+
     TOKEN_END,
     TOKEN_INVALID,
 };
@@ -129,6 +137,15 @@ static struct sql_token sql_lex_match_identifier(struct sql_lexer *lexer) {
     // was it a keyword?
     switch (CHAR_LOWER(*lexer->start)) {
     case 'a':
+        if (lexer->current - lexer->start > 1) {
+            switch (CHAR_LOWER(lexer->start[1])) {
+            case 'n':
+                return sql_lex_match_keyword_part(lexer, 2, 1, "d", TOKEN_AND);
+            case 'u':
+                return sql_lex_match_keyword_part(lexer, 2, 11, "toincrement",
+                                                  TOKEN_AUTOINCREMENT);
+            }
+        }
         return sql_lex_match_keyword_part(lexer, 1, 2, "nd", TOKEN_AND);
     case 's':
         return sql_lex_match_keyword_part(lexer, 1, 5, "elect", TOKEN_SELECT);
@@ -137,10 +154,31 @@ static struct sql_token sql_lex_match_identifier(struct sql_lexer *lexer) {
     case 'w':
         return sql_lex_match_keyword_part(lexer, 1, 4, "here", TOKEN_WHERE);
     case 't':
-        return sql_lex_match_keyword_part(lexer, 1, 4, "able", TOKEN_TABLE);
+        if (lexer->current - lexer->start > 1) {
+            switch (CHAR_LOWER(lexer->start[1])) {
+            case 'a':
+                return sql_lex_match_keyword_part(lexer, 2, 3, "ble",
+                                                  TOKEN_TABLE);
+            case 'e':
+                return sql_lex_match_keyword_part(lexer, 2, 2, "xt",
+                                                  TOKEN_TEXT);
+            }
+        }
+    case 'i':
+        return sql_lex_match_keyword_part(lexer, 1, 6, "nteger", TOKEN_INTEGER);
+    case 'p':
+        return sql_lex_match_keyword_part(lexer, 1, 6, "rimary", TOKEN_PRIMARY);
+    case 'k':
+        return sql_lex_match_keyword_part(lexer, 1, 2, "ey", TOKEN_KEY);
+    case 'u':
+        return sql_lex_match_keyword_part(lexer, 1, 5, "nique", TOKEN_KEY);
+    case 'n':
+        return sql_lex_match_keyword_part(
+            lexer, 1, 7, "ot null",
+            TOKEN_NOT_NULL); // currently only need nulls when they're not ;)
     case 'c':
         if (lexer->current - lexer->start > 1) {
-            switch (lexer->start[1]) {
+            switch (CHAR_LOWER(lexer->start[1])) {
             case 'o':
                 return sql_lex_match_keyword_part(lexer, 2, 3, "unt",
                                                   TOKEN_COUNT);
@@ -348,7 +386,104 @@ static void sql_parse_select(struct sql_parser *parser, struct sql_query *q) {
                                "expected statement end or where clause");
 }
 
-static void sql_parse_create(struct sql_parser *parser, struct sql_query *q) {}
+// CREATE TABLE orange (id integer primary key, pineapple text,strawberry
+// text,banana text,grape text,apple text);
+//
+static void sql_parse_create_table_field(struct sql_parser *parser,
+                                         struct sql_query *q) {
+
+    if (parser->current.type != TOKEN_IDENTIFIER)
+        return sql_parse_error(parser, q, "expected identifier");
+    sql_parse_advance(parser);
+
+    q->fieldsn[q->fields_count].field_name = parser->previous.start;
+    q->fieldsn[q->fields_count].field_len = parser->previous.length;
+    q->fields_count++;
+
+    // now expexting a type
+    if (parser->current.type != TOKEN_TEXT &&
+        parser->current.type != TOKEN_INTEGER)
+        return sql_parse_error(parser, q, "expected type 'integer' or 'text'");
+    sql_parse_advance(parser);
+
+    // consume column constrains tokens
+    for (;;) {
+        switch (parser->current.type) {
+        case TOKEN_COMMA:
+        case TOKEN_RIGHT_PAREN:
+            goto done;
+        case TOKEN_KEY:
+        case TOKEN_PRIMARY:
+        case TOKEN_AUTOINCREMENT:
+        case TOKEN_UNIQUE:
+        case TOKEN_NOT_NULL:
+            break; // currently we don't do anything with these
+        default:
+            return sql_parse_error(parser, q, "unexpected token");
+        }
+        sql_parse_advance(parser);
+    }
+
+done:
+}
+
+static void sql_parse_create_table(struct sql_parser *parser,
+                                   struct sql_query *q) {
+
+    q->type = SQL_CREATE_TABLE_STATEMENT;
+
+    // table name
+    if (parser->current.type != TOKEN_IDENTIFIER)
+        return sql_parse_error(parser, q, "expected identifier");
+    sql_parse_advance(parser);
+
+    q->table_name = parser->previous.start;
+    q->table_name_len = parser->previous.length;
+
+    // field list openning
+    if (parser->current.type != TOKEN_LEFT_PAREN)
+        return sql_parse_error(parser, q, "expected '(");
+    sql_parse_advance(parser);
+
+    for (;;) {
+
+        sql_parse_create_table_field(parser, q);
+
+        if (q->parse_error)
+            break;
+
+        // keep going until closing
+        if (parser->current.type == TOKEN_RIGHT_PAREN)
+            break;
+        
+        if (parser->current.type != TOKEN_COMMA)
+            return sql_parse_error(parser, q, "expected ',' or ')");
+
+        sql_parse_advance(parser);
+    }
+
+    // consume closing parenthesis
+    sql_parse_advance(parser);
+}
+
+static void sql_parse_create_index(struct sql_parser *parser,
+                                   struct sql_query *q) {
+    // unused for now
+}
+
+static void sql_parse_create(struct sql_parser *parser, struct sql_query *q) {
+
+    sql_parse_advance(parser);
+    switch (parser->previous.type) {
+    case TOKEN_TABLE:
+        return sql_parse_create_table(parser, q);
+    case TOKEN_INDEX:
+        return sql_parse_create_index(parser, q);
+    default:
+        return sql_parse_error(parser, q,
+                               "expected keyword 'table' or 'index'");
+    }
+}
 
 static void sql_parse_sql_stmt(struct sql_parser *parser, struct sql_query *q) {
     sql_parse_advance(parser);

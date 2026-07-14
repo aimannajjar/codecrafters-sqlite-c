@@ -7,7 +7,7 @@
 
 int main(int argc, char *argv[]) {
 
-    // struct sql_query q = sql_parse_new(argv[1]);
+    // struct sql_query q = sql_parse_new(argv[2]);
     //
     // if (q.parse_error) {
     //     fprintf(stderr, "%s\n", q.parse_error_string);

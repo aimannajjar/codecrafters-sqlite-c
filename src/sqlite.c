@@ -166,8 +166,7 @@ static int sqlite_sql_stmt_exec_count(struct db *db,
     return count;
 }
 
-static int sqlite_sql_stmt_exec_select_leaf(char **conditions,
-                                            struct schema_record *ddl,
+static int sqlite_sql_stmt_exec_select_leaf(struct schema_record *ddl,
                                             struct btree_page *page,
                                             struct sql_query *query,
                                             FILE *database_file) {
@@ -329,8 +328,7 @@ found_page:
     return 0;
 }
 
-int sqlite_sql_stmt_exec_select_interiors(char **conditions,
-                                          struct schema_record *ddl,
+int sqlite_sql_stmt_exec_select_interiors(struct schema_record *ddl,
                                           struct sql_query *query,
                                           struct btree_page *parent_page,
                                           struct db *db, FILE *database_file) {
@@ -346,9 +344,9 @@ int sqlite_sql_stmt_exec_select_interiors(char **conditions,
         btree_page_read(db, &child_page, pn, database_file);
         if (child_page.page_type == TABLE_INTERIOR_PAGE) {
             sqlite_sql_stmt_exec_select_interiors(
-                conditions, ddl, query, &child_page, db, database_file);
+                ddl, query, &child_page, db, database_file);
         } else if (child_page.page_type == TABLE_LEAF_PAGE) {
-            if (sqlite_sql_stmt_exec_select_leaf(conditions, ddl, &child_page,
+            if (sqlite_sql_stmt_exec_select_leaf(ddl, &child_page,
                                                  query, database_file)) {
                 btree_page_free(&child_page);
                 return -1;
@@ -377,38 +375,22 @@ int sqlite_sql_stmt_exec(struct schema_record *schema, struct sql_query *query,
         int count = sqlite_sql_stmt_exec_count(db, &rootpage, database_file);
         printf("%d\n", count);
     } else if (query->type == SQL_SELECT_STATEMENT) {
-        struct sql_query schema_query;
-        char **conditions = NULL;
         char *sql = strdup(schema->sql);
 
         // parse DDL query to figure out field positions
-        // TODO: switch to new parse once CREATE is supported
-        sql_parse(sql, &schema_query);
+        struct sql_query schema_query = sql_parse_new(sql);
 
-        if (!sql) {
-            perror("error parsing schema");
+        if (schema_query.parse_error) {
+            fprintf(stderr, "%s\n", schema_query.parse_error_string);
             result = -1;
             goto free_header;
         }
 
-        // if select query has were clause, build conditions array
-        if (query->command & COMMAND_SELECT_WHERE) {
-            conditions = calloc(schema_query.fields_count, sizeof(void *));
-
-            // create inverted field-index to condition
-            // if a field is not conditioned, the pointer will be NULL
-            for (int i = 0; i < query->where_fields_count; i++) {
-                int n = hget(&schema->col_index, strlen(query->where_fields[i]),
-                             query->where_fields[i]);
-                conditions[n] = query->where_values[i];
-            }
-        }
-
         if (rootpage.page_type == TABLE_INTERIOR_PAGE) {
-            sqlite_sql_stmt_exec_select_interiors(conditions, schema, query,
-                                                  &rootpage, db, database_file);
+            sqlite_sql_stmt_exec_select_interiors(schema, query, &rootpage, db,
+                                                  database_file);
         } else {
-            sqlite_sql_stmt_exec_select_leaf(conditions, schema, &rootpage,
+            sqlite_sql_stmt_exec_select_leaf(schema, &rootpage,
                                              query, database_file);
         }
     }
