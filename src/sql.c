@@ -301,8 +301,8 @@ static void sql_parse_select_condition(struct sql_parser *parser,
     q->conditions[q->conditions_count++] = (struct sql_select_condition){
         .field_name = field_name,
         .field_name_len = field_name_len,
-        .field_value = field_value,
-        .field_value_len = field_value_len,
+        .field_value = field_value + 1, // skip lead quote mark
+        .field_value_len = field_value_len - 2, // skip ending quote mark
         .is_numeric = field_value_numeric,
     };
 

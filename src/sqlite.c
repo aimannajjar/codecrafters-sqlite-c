@@ -185,33 +185,37 @@ static int sqlite_sql_stmt_exec_select_leaf(char **conditions,
             break;
         }
 
-        // if (query->command & COMMAND_SELECT_WHERE) {
-        //     for (int i = 0; i < query->where_fields_count; i++) {
-        //         int fp = hget(&ddl->col_index, query->where_fields[i]);
-        //         struct field *f = &cell.record.fields[fp];
-        //         if (f->type == FIELD_TYPE_TEXT) {
-        //             if (conditions[fp] && strcmp(f->data, conditions[fp])) {
-        //                 filtered = 1;
-        //             } else {
-        //                 filtered = 0;
-        //             }
-        //
-        //         } else if (f->type == FIELD_TYPE_NUMBER) {
-        //             if (conditions[fp]) {
-        //                 int v = atoi(conditions[fp]);
-        //                 if (v != f->number) {
-        //                     filtered = 1;
-        //                     break;
-        //                 }
-        //             }
-        //         }
-        //     }
-        //     if (filtered) {
-        //         btree_leaf_cell_free(&cell);
-        //         continue;
-        //     }
-        // }
-        //
+        if (query->conditions_count) {
+            for (int i = 0; i < query->conditions_count; i++) {
+                struct sql_select_condition cond = query->conditions[i];
+                int fp =
+                    hget(&ddl->col_index, cond.field_name_len, cond.field_name);
+
+                // currenlty only supporting AND congjunction
+                // also only supporting exact match filters for now
+                struct field *f = &cell.record.fields[fp];
+                if (cond.is_numeric) {
+                    int v =
+                        strtol(cond.field_value, NULL, cond.field_value_len);
+                    if (v != f->number) {
+                        filtered = 1;
+                        break;
+                    }
+                } else {
+                    if (strncmp(f->data, cond.field_value,
+                                cond.field_value_len)) {
+                        filtered = 1;
+                    } else {
+                        filtered = 0;
+                    }
+                }
+            }
+            if (filtered) {
+                btree_leaf_cell_free(&cell);
+                continue;
+            }
+        }
+
         for (int i = 0; i < query->fields_count; i++) {
             int fp = hget(&ddl->col_index, query->fieldsn[i].field_len,
                           query->fieldsn[i].field_name);
