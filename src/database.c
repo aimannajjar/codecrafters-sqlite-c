@@ -112,7 +112,7 @@ int db_read_schema_table(struct db *db, struct schema_record **records,
     for (row = 0; row < cells_len; row++) {
         struct btree_leaf_cell cell;
         if (btree_leaf_cell_read(&cell, &schema_page_header, row,
-                                  database_file)) {
+                                 database_file)) {
             puts("failed to parse schema page");
             break;
         }
@@ -185,22 +185,16 @@ int db_read_schema_table(struct db *db, struct schema_record **records,
             goto error;
         }
 
-        int i = 0;
-        char *tokptr;
-        struct sql_query q;
-        if (sql_parse(schema_sql, &q)) {
+        struct sql_query q = sql_parse(schema_sql);
+        if (q.parse_error) {
             free(schema_sql);
-            fputs("failed parse ddl\n", stderr);
+            fprintf(stderr, "%s\n", q.parse_error_string);
             goto error;
         }
 
-        char *schema_field = strtok_r(q.fields_list, ",", &tokptr);
-        if (schema_field) {
-            do {
-                hput(&srecs[row].col_index, strlen(schema_field), schema_field, i++);
-            } while ((schema_field = strtok_r(NULL, ",", &tokptr)));
-        }
-        free(schema_sql);
+        for (int i = 0; i < q.fields_count; i++)
+            hput(&srecs[row].col_index, q.fields[i].field_len,
+                 q.fields[i].field_name, i);
     }
     btree_page_free(&schema_page_header);
     *records = srecs;
@@ -212,3 +206,4 @@ error:
     free(srecs);
     return -1;
 }
+

@@ -19,7 +19,7 @@ int sqlite_cmd_sql_stmt(char *stmt, struct db *db, FILE *database_file) {
     int table_ddl = -1;
     int index_ddl = -1;
 
-    struct sql_query query = sql_parse_new(stmt);
+    struct sql_query query = sql_parse(stmt);
     if (query.parse_error) {
         fprintf(stderr, "%s\n", query.parse_error_string);
         return -1;
@@ -36,11 +36,12 @@ int sqlite_cmd_sql_stmt(char *stmt, struct db *db, FILE *database_file) {
     size_t i = 0;
     for (i = 0; i < rlen; i++) {
         if (!strcmp(records[i].type, "table") &&
-            !memcmp(records[i].tbl_name, query.table_name,
-                    query.table_name_len)) {
+            !strncmp(records[i].tbl_name, query.table_name,
+                     query.table_name_len)) {
             table_ddl = i;
         } else if (!strcmp(records[i].type, "index") &&
-                   !strcmp(records[i].tbl_name, query.table)) {
+                   !strncmp(records[i].tbl_name, query.table_name,
+                            query.table_name_len)) {
             index_ddl = i;
         }
 
@@ -49,7 +50,7 @@ int sqlite_cmd_sql_stmt(char *stmt, struct db *db, FILE *database_file) {
     }
 
     if (table_ddl >= 0) {
-        if (query.where_fields_count && index_ddl > 0) {
+        if (query.conditions_count && index_ddl > 0) {
             sqlite_sql_search_index(db, &records[index_ddl],
                                     &records[table_ddl], &query, database_file);
         } else {
@@ -66,10 +67,10 @@ int sqlite_cmd_sql_stmt(char *stmt, struct db *db, FILE *database_file) {
     return -1;
 }
 
-// TODO: use proper tree traversal
 int sqlite_sql_search_index_tree(struct db *db, struct btree_page *page,
-                                 char *condition, size_t n, int64_t results[n],
-                                 size_t *curr, FILE *database_file) {
+                                 struct sql_select_condition condition,
+                                 size_t n, int64_t results[n], size_t *curr,
+                                 FILE *database_file) {
 
     if (*curr >= n) {
         printf("reached maximum results: %lu\n", *curr);
@@ -83,7 +84,8 @@ int sqlite_sql_search_index_tree(struct db *db, struct btree_page *page,
         for (size_t i = 0; i < cell.record.fields_count; i++) {
             struct field *f = &cell.record.fields[i];
             if (f->type == FIELD_TYPE_TEXT) {
-                if (!strcmp(condition, f->data)) {
+                if (!strncmp(condition.field_value, f->data,
+                             condition.field_value_len)) {
                     match = 1;
                 }
             } else if (f->type == FIELD_TYPE_NUMBER) {
@@ -121,8 +123,8 @@ int sqlite_sql_search_index(struct db *db, struct schema_record *index_ddl,
         return -1;
 
     if (page.page_type == INDEX_INTERIOR_PAGE) {
-        sqlite_sql_search_index_tree(db, &page, query->where_values[0],
-                                     sizeof results, results, &found_pos,
+        sqlite_sql_search_index_tree(db, &page, query->conditions[0],
+                                     SEARCH_MAX_RESULTS, results, &found_pos,
                                      database_file);
 
         // search right most child of page
@@ -130,8 +132,8 @@ int sqlite_sql_search_index(struct db *db, struct schema_record *index_ddl,
         if (btree_page_read(db, &right_child, page.right_ptr, database_file))
             return -1;
 
-        sqlite_sql_search_index_tree(db, &right_child, query->where_values[0],
-                                     sizeof results, results, &found_pos,
+        sqlite_sql_search_index_tree(db, &right_child, query->conditions[0],
+                                     SEARCH_MAX_RESULTS, results, &found_pos,
                                      database_file);
 
         btree_page_free(&right_child);
@@ -192,7 +194,7 @@ static int sqlite_sql_stmt_exec_select_leaf(struct schema_record *ddl,
 
                 if (fp == -1) {
                     fprintf(stderr, "column '%.*s' in where clause not found\n",
-                            (int)cond.field_name_len, cond.field_name, stderr);
+                            (int)cond.field_name_len, cond.field_name);
 
                     btree_leaf_cell_free(&cell);
                     return -1;
@@ -224,7 +226,7 @@ static int sqlite_sql_stmt_exec_select_leaf(struct schema_record *ddl,
         }
 
         for (int i = 0; i < query->fields_count; i++) {
-            struct sql_field field = query->fieldsn[i];
+            struct sql_field field = query->fields[i];
             int fp = hget(&ddl->col_index, field.field_len, field.field_name);
             if (i > 0)
                 putchar('|');
@@ -299,16 +301,16 @@ found_page:
         }
 
         for (int i = 0; i < query->fields_count; i++) {
-            int fp = hget(&ddl->col_index, strlen(query->fields[i]),
-                          query->fields[i]);
+            int fp = hget(&ddl->col_index, query->fields[i].field_len,
+                          query->fields[i].field_name);
             if (i > 0)
                 putchar('|');
 
             if (fp < 0 || fp >= cell.record.fields_count) {
-                fprintf(stderr,
-                        "field parsing failed: %s field index %d out of "
-                        "bounds\n",
-                        query->fields[i], fp);
+                fprintf(stderr, "column '%.*s' not found\n",
+                        (int)query->fields[i].field_len,
+                        query->fields[i].field_name);
+
                 btree_leaf_cell_free(&cell);
                 return -1;
             }
@@ -343,11 +345,11 @@ int sqlite_sql_stmt_exec_select_interiors(struct schema_record *ddl,
         // sqlite_sql_stmt_exec
         btree_page_read(db, &child_page, pn, database_file);
         if (child_page.page_type == TABLE_INTERIOR_PAGE) {
-            sqlite_sql_stmt_exec_select_interiors(
-                ddl, query, &child_page, db, database_file);
+            sqlite_sql_stmt_exec_select_interiors(ddl, query, &child_page, db,
+                                                  database_file);
         } else if (child_page.page_type == TABLE_LEAF_PAGE) {
-            if (sqlite_sql_stmt_exec_select_leaf(ddl, &child_page,
-                                                 query, database_file)) {
+            if (sqlite_sql_stmt_exec_select_leaf(ddl, &child_page, query,
+                                                 database_file)) {
                 btree_page_free(&child_page);
                 return -1;
             }
@@ -378,7 +380,7 @@ int sqlite_sql_stmt_exec(struct schema_record *schema, struct sql_query *query,
         char *sql = strdup(schema->sql);
 
         // parse DDL query to figure out field positions
-        struct sql_query schema_query = sql_parse_new(sql);
+        struct sql_query schema_query = sql_parse(sql);
 
         if (schema_query.parse_error) {
             fprintf(stderr, "%s\n", schema_query.parse_error_string);
@@ -390,8 +392,8 @@ int sqlite_sql_stmt_exec(struct schema_record *schema, struct sql_query *query,
             sqlite_sql_stmt_exec_select_interiors(schema, query, &rootpage, db,
                                                   database_file);
         } else {
-            sqlite_sql_stmt_exec_select_leaf(schema, &rootpage,
-                                             query, database_file);
+            sqlite_sql_stmt_exec_select_leaf(schema, &rootpage, query,
+                                             database_file);
         }
     }
 

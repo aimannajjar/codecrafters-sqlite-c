@@ -1,5 +1,4 @@
 #include "sql.h"
-#include <ctype.h>
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -131,7 +130,8 @@ static struct sql_token sql_lex_match_number(struct sql_lexer *lexer) {
 
 static struct sql_token sql_lex_match_identifier(struct sql_lexer *lexer) {
     while (!sql_lex_eof(lexer) &&
-           (IS_ALPHA(sql_lex_peek(lexer)) || IS_DIGIT(sql_lex_peek(lexer))))
+           (IS_ALPHA(sql_lex_peek(lexer)) || IS_DIGIT(sql_lex_peek(lexer)) ||
+            sql_lex_peek(lexer) == '_'))
         sql_lex_advance(lexer);
 
     // was it a keyword?
@@ -165,6 +165,17 @@ static struct sql_token sql_lex_match_identifier(struct sql_lexer *lexer) {
             }
         }
     case 'i':
+        if (lexer->current - lexer->start > 2 &&
+            CHAR_LOWER(lexer->start[1] == 'n')) {
+            switch (CHAR_LOWER(lexer->start[2])) {
+            case 'd':
+                return sql_lex_match_keyword_part(lexer, 3, 2, "ex",
+                                                  TOKEN_INDEX);
+            case 't':
+                return sql_lex_match_keyword_part(lexer, 3, 4, "eger",
+                                                  TOKEN_INTEGER);
+            }
+        }
         return sql_lex_match_keyword_part(lexer, 1, 6, "nteger", TOKEN_INTEGER);
     case 'p':
         return sql_lex_match_keyword_part(lexer, 1, 6, "rimary", TOKEN_PRIMARY);
@@ -261,14 +272,14 @@ static void sql_parse_select_field_list(struct sql_parser *parser,
 
     switch (parser->previous.type) {
     case TOKEN_STAR:
-        q->fieldsn[q->fields_count++] = (struct sql_field){
+        q->fields[q->fields_count++] = (struct sql_field){
             .field_name = "*",
             .field_len = 1,
         };
         break;
     case TOKEN_IDENTIFIER:
         while (1) {
-            q->fieldsn[q->fields_count++] = (struct sql_field){
+            q->fields[q->fields_count++] = (struct sql_field){
                 .field_name = parser->previous.start,
                 .field_len = parser->previous.length,
             };
@@ -392,19 +403,27 @@ static void sql_parse_select(struct sql_parser *parser, struct sql_query *q) {
 static void sql_parse_create_table_field(struct sql_parser *parser,
                                          struct sql_query *q) {
 
-    if (parser->current.type != TOKEN_IDENTIFIER)
+    if (parser->current.type != TOKEN_IDENTIFIER &&
+        parser->current.type !=
+            TOKEN_STRING) // sqlite allows double quoted strings in field names
         return sql_parse_error(parser, q, "expected identifier");
     sql_parse_advance(parser);
 
-    q->fieldsn[q->fields_count].field_name = parser->previous.start;
-    q->fieldsn[q->fields_count].field_len = parser->previous.length;
+    q->fields[q->fields_count].field_name = parser->previous.start;
+    q->fields[q->fields_count].field_len = parser->previous.length;
+    if (parser->previous.type == TOKEN_STRING) {
+        // strip quotes from quoted field names
+        q->fields[q->fields_count].field_name++;
+        q->fields[q->fields_count].field_len -= 2;
+    }
     q->fields_count++;
 
     // now expexting a type
-    if (parser->current.type != TOKEN_TEXT &&
-        parser->current.type != TOKEN_INTEGER)
-        return sql_parse_error(parser, q, "expected type 'integer' or 'text'");
-    sql_parse_advance(parser);
+    // if (parser->current.type != TOKEN_TEXT &&
+    //     parser->current.type != TOKEN_INTEGER)
+    //     return sql_parse_error(parser, q, "expected type 'integer' or
+    //     'text'");
+    // sql_parse_advance(parser);
 
     // consume column constrains tokens
     for (;;) {
@@ -412,6 +431,8 @@ static void sql_parse_create_table_field(struct sql_parser *parser,
         case TOKEN_COMMA:
         case TOKEN_RIGHT_PAREN:
             goto done;
+        case TOKEN_INTEGER:
+        case TOKEN_TEXT:
         case TOKEN_KEY:
         case TOKEN_PRIMARY:
         case TOKEN_AUTOINCREMENT:
@@ -455,7 +476,7 @@ static void sql_parse_create_table(struct sql_parser *parser,
         // keep going until closing
         if (parser->current.type == TOKEN_RIGHT_PAREN)
             break;
-        
+
         if (parser->current.type != TOKEN_COMMA)
             return sql_parse_error(parser, q, "expected ',' or ')");
 
@@ -497,7 +518,7 @@ static void sql_parse_sql_stmt(struct sql_parser *parser, struct sql_query *q) {
     }
 }
 
-struct sql_query sql_parse_new(const char *query) {
+struct sql_query sql_parse(const char *query) {
     struct sql_lexer lexer = {
         .start = query,
         .current = query,
@@ -522,266 +543,3 @@ struct sql_query sql_parse_new(const char *query) {
     return q;
 }
 
-void strtolower(char *s) {
-    char *c = s;
-    while (*c) {
-        *c = tolower(*c);
-        c++;
-    }
-}
-
-#define KEYWORD_MATCH(token, keyword)                                          \
-    (!strcmp(keyword, token) || !strcmp(keyword ",", token))
-
-static inline bool is_sql_keyword(char *tok) {
-    return (KEYWORD_MATCH(tok, "primary") || KEYWORD_MATCH(tok, "key") ||
-            KEYWORD_MATCH(tok, "autoincrement") || KEYWORD_MATCH(tok, "not") ||
-            KEYWORD_MATCH(tok, "null"));
-}
-
-int sql_create_spec_parse(char *spec, struct sql_query *query) {
-    // for now we're only interested in field names and not types
-    query->fields_list[0] = 0;
-    query->fields_count = 0;
-    char *tok = strtok(spec, " \t\n,()");
-    if (!tok)
-        goto invalid;
-
-    int i = 0;
-    int offset = 0;
-    do {
-        char field_name[FIELD_NAME_MAX_LEN];
-        int foffset = 0;
-        strtolower(tok);
-        // printf("tok is '%s'\n", tok);
-        if (KEYWORD_MATCH(tok, "autoincrement")) {
-        }
-
-        if (is_sql_keyword(tok))
-            continue;
-
-        if (i++ & 1)
-            // this is a field type
-            continue;
-
-        if (tok[0] == '"') {
-            // skip leading double-quote
-            strncpy(field_name, tok + 1, sizeof field_name);
-            foffset = strlen(tok) - 1;
-            while ((tok = strtok(NULL, " ")) && tok[strlen(tok) - 1] != '"') {
-                // TODO error handling
-                foffset += snprintf(field_name + foffset,
-                                    sizeof(field_name) - foffset, " %s", tok);
-            }
-            // strip ending double-quote
-            tok[strlen(tok) - 1] = 0;
-        }
-
-        snprintf(field_name + foffset, sizeof(field_name) - foffset,
-                 foffset ? " %s" : "%s", tok);
-
-        const char *fmt = (i - 1 == 0) ? "%s" : ",%s";
-
-        int c = snprintf(query->fields_list + offset,
-                         sizeof query->fields_list - offset, fmt, field_name);
-        if (c < 0 || c >= sizeof query->fields_list - offset) {
-            fputs("error building field list or field list too big", stderr);
-            goto invalid;
-        }
-        offset += c;
-        query->fields_count++;
-
-    } while ((tok = strtok(NULL, " \t\n,()")));
-
-    return 0;
-invalid:
-    return -1;
-}
-/** very simplistic SQL parser supports only few types of statements
- ** this will modify *sql
- */
-int sql_parse(char *sql, struct sql_query *query) {
-
-    // printf("parsing %s\n", sql);
-    char *tok;
-    int i = 0;
-    tok = strtok(sql, " \n");
-    query->table[0] = '\0';
-    query->fields_list[0] = '\0';
-    query->command = COMMAND_INVALID;
-
-    if (!tok)
-        goto invalid;
-
-    do {
-        strtolower(tok);
-        switch (i++) {
-        case 0:
-            if (strcmp(tok, "select") == 0) {
-                query->command = COMMAND_SELECT;
-            } else if (strcmp(tok, "create") == 0) {
-                query->command = COMMAND_CREATE_TABLE;
-            }
-            break;
-        case 1:
-            if (query->command & COMMAND_SELECT) {
-                if (strcmp(tok, "count(*)") == 0) {
-                    query->command = COMMAND_SELECT_COUNT;
-                } else {
-                    // consume all tokens until "from"
-                    int offset = 0;
-                    int j = 0;
-                    query->fields_count = 0;
-                    do {
-                        strtolower(tok);
-                        if (!strcmp(tok, "from")) {
-                            i++; // we've already consumed extra "from"
-                                 // token
-                            break;
-                        }
-
-                        char *ptr = NULL;
-                        char *field_token = strtok_r(tok, ",", &ptr);
-                        if (!field_token)
-                            goto invalid;
-
-                        do {
-
-                            char *fmt = (j++ == 0 ||
-                                         query->fields_list[offset - 1] == ',')
-                                            ? "%s"
-                                            : ",%s";
-
-                            int c = snprintf(query->fields_list + offset,
-                                             sizeof query->fields_list - offset,
-                                             fmt, field_token);
-                            strncpy(query->fields[query->fields_count],
-                                    field_token, sizeof query->fields[0]);
-                            query->fields[query->fields_count]
-                                         [sizeof query->fields[0] - 1] = '\0';
-                            query->fields_count++;
-
-                            if (c <= 0 ||
-                                c >= sizeof query->fields_list - offset) {
-                                fputs("error building field list or field "
-                                      "list "
-                                      "too "
-                                      "big",
-                                      stderr);
-                                return -1;
-                            }
-                            offset += c;
-                        } while ((field_token = strtok_r(NULL, ",", &ptr)));
-
-                    } while ((tok = strtok(NULL, " ")));
-                    query->fields_list[sizeof query->fields_list - 1] = 0;
-                }
-            } else if (query->command & COMMAND_CREATE_TABLE) {
-                if (!strcmp(tok, "index")) {
-                    query->command = COMMAND_CREATE_INDEX;
-                } else if (strcmp(tok, "table")) {
-                    // we only support create table so far
-                    fprintf(stderr,
-                            "only create table supported currently, got: %s\n",
-                            tok);
-                    goto invalid;
-                }
-            }
-            break;
-        case 2:
-            if (query->command &
-                (COMMAND_CREATE_TABLE | COMMAND_CREATE_INDEX)) {
-                strncpy(query->table, tok, TABLE_NAME_MAX_LEN);
-                query->table[sizeof query->table - 1] = '\0';
-            }
-            break;
-        case 3:
-            if (query->command & COMMAND_CREATE_TABLE) {
-                // consume all remaining tokens to put hem in field list
-                char *create_spec_tokens = strtok(NULL, "");
-                char create_spec[FIELDS_LIST_MAX_LEN];
-                int c = snprintf(create_spec, sizeof create_spec, "%s %s", tok,
-                                 create_spec_tokens);
-                if (c <= 0 || c >= sizeof create_spec) {
-                    fputs("error parsing create sql stmt", stderr);
-                    goto invalid;
-                }
-
-                if (sql_create_spec_parse(create_spec, query)) {
-                    fputs("error parsing create sql stmt", stderr);
-                    goto invalid;
-                }
-            } else if (query->command & (COMMAND_SELECT | COMMAND_SELECT_COUNT |
-                                         COMMAND_SELECT_WHERE)) {
-                strncpy(query->table, tok, TABLE_NAME_MAX_LEN);
-                query->table[sizeof query->table - 1] = '\0';
-            }
-            break;
-        case 4:
-            if (query->command & COMMAND_SELECT) {
-                // assume single where clause condition
-                char *rest = strtok(NULL, "");
-                if (!rest) {
-                    fputs("parsing error", stderr);
-                    return -1;
-                }
-
-                char *where_tok = strtok(rest, "= '");
-                if (!where_tok) {
-                    fputs("where clause parsing error", stderr);
-                    return -1;
-                }
-
-                int offset = 0;
-                int i = 0;
-                do {
-                    strncpy(query->where_fields[i], where_tok,
-                            sizeof query->where_fields[i] - 1);
-                    query->where_fields[i][sizeof query->where_fields[i] - 1] =
-                        0;
-
-                    // for functions that search the field list as a string
-                    char *fmt = (i == 0) ? "%s" : ",%s";
-                    int c = snprintf(query->where_fields_list,
-                                     sizeof query->where_fields_list - offset,
-                                     fmt, where_tok);
-                    if (c <= 0 ||
-                        c >= sizeof query->where_fields_list - offset) {
-                        fputs("error while building filed list", stderr);
-                        return -1;
-                    }
-                    offset += c;
-
-                    where_tok = strtok(NULL, "='");
-                    where_tok = strtok(NULL, "='");
-
-                    if (!where_tok) {
-                        fputs("expected value", stderr);
-                        return -1;
-                    }
-
-                    strncpy(query->where_values[i], where_tok,
-                            sizeof query->where_values[i] - 1);
-                    query->where_values[i][sizeof query->where_values[i] - 1] =
-                        0;
-                    i++;
-
-                } while ((where_tok = strtok(NULL, "='")));
-                query->where_fields_count = i;
-                query->command |= COMMAND_SELECT_WHERE;
-            }
-            break;
-        }
-    } while ((tok = strtok(NULL, " \n")));
-
-    if (query->table[0] == '\0' || query->command & COMMAND_INVALID) {
-        fprintf(stderr,
-                "could not determine target table or sql command: %s (%d)\n",
-                query->table, query->command);
-    invalid:
-        fputs("invalid SQL statement\n", stderr);
-        return -1;
-    }
-
-    return 0;
-}
