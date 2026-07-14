@@ -197,7 +197,7 @@ int db_read_schema_table(struct db *db, struct schema_record **records,
         char *schema_field = strtok_r(q.fields_list, ",", &tokptr);
         if (schema_field) {
             do {
-                hput(&srecs[row].col_index, schema_field, i++);
+                hput(&srecs[row].col_index, strlen(schema_field), schema_field, i++);
             } while ((schema_field = strtok_r(NULL, ",", &tokptr)));
         }
         free(schema_sql);

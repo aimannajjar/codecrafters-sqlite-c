@@ -264,6 +264,9 @@ static void sql_parse_select_from(struct sql_parser *parser,
     sql_parse_advance(parser);
     if (parser->previous.type != TOKEN_IDENTIFIER)
         return sql_parse_error(parser, q, "expected identifier");
+
+    q->table_name = parser->previous.start;
+    q->table_name_len = parser->previous.length;
 }
 
 static void sql_parse_select_condition(struct sql_parser *parser,

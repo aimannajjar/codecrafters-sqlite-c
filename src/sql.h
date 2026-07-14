@@ -59,6 +59,10 @@ struct sql_query {
     char parse_error_string[SQL_PARSE_ERROR_STRING_MAX];
     struct sql_select_condition conditions[SQL_STATEMENT_MAX_CONDITIONS_LEN];
     size_t conditions_count;
+
+    const char *table_name; // a slice from query, not nul-terminated, use len
+    size_t table_name_len;
+
 };
 
 int sql_parse(char *sql, struct sql_query *query);
